@@ -151,16 +151,14 @@ class AIPlayer(Player):
     #Return: The Move to be made
     ##
     def getMove(self, currentState):
-        moves = listAllLegalMoves(currentState)
-        selectedMove = moves[random.randint(0,len(moves) - 1)]
-
         me = currentState.whoseTurn
         self.elmoId = me
 
-        #the first time this method is called, the food and tunnel locations
-        #need to be recorded in their respective instance variables
+        # the first time this method is called, the food and tunnel locations
+        # need to be recorded in their respective instance variables
         if (self.myTunnel == None):
             self.myTunnel = getConstrList(currentState, me, (TUNNEL,))[0]
+
         foods = getConstrList(currentState, None, (FOOD,))
         if len(foods) > 0:
             if (self.myFood == None):
@@ -177,21 +175,20 @@ class AIPlayer(Player):
         if self.enemyTunnel == None:
             self.enemyTunnel = getConstrList(currentState, 1-me, (TUNNEL,))[0]
 
-        if self.enemyTunnel == None:
-            self.enemyTunnel = getConstrList(currentState, 1-me, (TUNNEL,))[0]
-
+        # recursive function to get moves
         nodes = self.findBestMove(currentState, 0)
 
         bestScore = -1
-        i = 0
-        bestScoreIndex = 0
+        bestNode = None
         for node in nodes:
             if node[2] > bestScore:
                 bestScore = node[2]
-                bestScoreIndex = i
-            i += 1
-        selectedMove = nodes[bestScoreIndex][0]
+                bestNode = node
 
+        if bestNode == None:
+            selectedMove = Move(END, None, None)
+        else:
+            selectedMove = bestNode[0]
         return selectedMove
 
     ##
@@ -238,14 +235,21 @@ class AIPlayer(Player):
             enemyWorkerList = getAntList(currentState, self.elmoId, (WORKER,))
 
         ####Automatic game winning or losing####
+        # TODO add scaling
 
-        if myQueen == None or myInv.getAnthill().captureHealth <= 0 or \
-            len(myInv.ants) == 1 and myInv.foodCount == 0 or enemyInv.foodCount >= FOOD_GOAL:
-            return -1.0
+        winner = getWinner(currentState)
 
-        if enemyQueen == None or enemyInv.getAnthill().captureHealth <= 0 or \
-            len(enemyInv.ants) == 1 and enemyInv.foodCount == 0 or myInv.foodCount >= FOOD_GOAL:
-            return 1.0
+        if winner == 1:
+            return 1
+        elif winner == 0:
+            return -1
+        # if myQueen == None or myInv.getAnthill().captureHealth <= 0 or \
+        #     len(myInv.ants) == 1 and myInv.foodCount == 0 or enemyInv.foodCount >= FOOD_GOAL:
+        #     return -1.0
+        #
+        # if enemyQueen == None or enemyInv.getAnthill().captureHealth <= 0 or \
+        #     len(enemyInv.ants) == 1 and enemyInv.foodCount == 0 or myInv.foodCount >= FOOD_GOAL:
+        #     return 1.0
 
         # calculate scores for ants
         workerCount = 0
@@ -265,16 +269,16 @@ class AIPlayer(Player):
                 if ant.coords == myInv.getAnthill().coords:
                     score -= 25
 
-
-
         # having more than one worker can damage performance: so more than one is an
         # undesirable state
         if workerCount > 1:
+            print('too many workers')
             return 0
 
         # calculate score for food
         score += myInv.foodCount * 7
 
+        print(score*0.01)
         # scale score down
         return score * 0.01
 
@@ -294,7 +298,7 @@ class AIPlayer(Player):
             currentNodes.append(node)
 
         # sort nodes based on their initial state evaluation score
-        # currentNodes.sort(key=lambda x: int(x[2]))
+        currentNodes.sort(key=lambda x: int(x[2]))
 
         # base case
         if currentDepth == self.depthLimit:
@@ -302,8 +306,8 @@ class AIPlayer(Player):
 
         # recursive call to evaluate score based on child nodes
         for node in currentNodes[0:15]:
-            state = node[1]
             move = node[0]
+            state = node[1]
             value = self.findBestMove(state, currentDepth+1)
             node = (move, state, value)
             childNodes.append(node)
@@ -311,13 +315,14 @@ class AIPlayer(Player):
         if currentDepth > 0:
             return self.getAvgScore(childNodes)
         else:
-            return childNodes
+            return childNodes # TODO return best move instead of child nodes
 
     # get the average score for every node at a level
     def getAvgScore(self, nodeList):
         avgScore = 0
         for node in nodeList:
-            score = self.stateEvaluation(node[1])
+            # score = self.stateEvaluation(node[1])
+            score = node[2]
             avgScore += score
         avgScore = avgScore / len(nodeList)
         return avgScore
