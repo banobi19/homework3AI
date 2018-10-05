@@ -19,11 +19,11 @@ from AIPlayerUtils import *
 # Automatic Win or lose case: This will result into an automatic -1 or 1
 # - 1 means our ai lost and 1 is our ai wins
 #Done - Opponent quenen is killed
-#Done - Sit on the anthill for three turns 
-#Done - 11 food 
+#Done - Sit on the anthill for three turns
+#Done - 11 food
 #Done - no workers and no food
 
-# Game state cases: 
+# Game state cases:
 #Done 1) Type of worker: 1, solider/drone/range: 2
 #Done 2) For all ants get health based on manual table
 #Done 3) 1 per food in storage and currently holding
@@ -33,7 +33,7 @@ from AIPlayerUtils import *
 # 7) +3/-3 if we are on enemy anthil with attacking ant or vice versa
 # multiple *.01 to make sure that we stay under 1. and 1
 
-# 2. Dictionary 
+# 2. Dictionary
 # - the Move that would be taken in the given state from the parent node
 # - the state that would be reached by taking that move
 # - an evaluation of this state. When a node is initially created, this will be generated
@@ -78,12 +78,18 @@ class AIPlayer(Player):
     #   cpy           - whether the player is a copy (when playing itself)
     ##
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "Taking L's")
+        super(AIPlayer,self).__init__(inputPlayerId, "Elmo")
         self.childNodes = None
         self.depthLimit = 2
-        self.enemyTunnel = None
+        self.elmoId = None
+
+        self.myAntHill = None
         self.myFood = None
         self.myTunnel = None
+
+        self.enemyAntHill = None
+        self.enemyTunnel = None
+        self.enemyFood = None
 
     ##
     #getPlacement
@@ -138,7 +144,7 @@ class AIPlayer(Player):
             return moves
         else:
             return [(0, 0)]
-    
+
 
     ##
     #getMove
@@ -150,51 +156,139 @@ class AIPlayer(Player):
     #Return: The Move to be made
     ##
     def getMove(self, currentState):
-        moves = listAllLegalMoves(currentState)
-        selectedMove = moves[random.randint(0,len(moves) - 1)]
-
-        #nodes = self.findBestMove(currentState, 0)
         me = currentState.whoseTurn
-        
-        #the first time this method is called, the food and tunnel locations
-        #need to be recorded in their respective instance variables
-        if (self.myTunnel == None):
-            self.myTunnel = getConstrList(currentState, me, (TUNNEL,))[0]
-        foods = getConstrList(currentState, None, (FOOD,))
-        if len(foods) > 0:
-            if (self.myFood == None):
 
-                self.myFood = foods[0]
-                #find the food closest to the tunnel
-                bestDistSoFar = 1000 #i.e., infinity
-                for food in foods:
-                    dist = stepsToReach(currentState, self.myTunnel.coords, food.coords)
-                    if (dist < bestDistSoFar):
-                        self.myFood = food
-                        bestDistSoFar = dist
+        # the first time this method is called, the food and tunnel locations
+        # need to be recorded in their respective instance variables
+        self.setVariables(currentState, me)
 
-        if self.enemyTunnel == None:
-            self.enemyTunnel = getConstrList(currentState, 1-me, (TUNNEL,))[0]
-
-        
-        if self.enemyTunnel == None:
-            self.enemyTunnel = getConstrList(currentState, 1-me, (TUNNEL,))[0]
-
-        nodes = self.findBestMove(currentState, 0)
-
-        bestScore = -1
-        i = 0
-        bestScoreIndex = 0
-        for node in nodes: 
-            if node[2] > bestScore:
-                bestScore = node[2]
-                bestScoreIndex = i
-            i += 1
-        selectedMove = nodes[bestScoreIndex][0]
-        
+        # recursive function to get moves
+        selectedMove =  self.findBestMove(currentState, 0)
 
         return selectedMove
-    
+
+    ##
+    # findClosestFood
+    #
+    def findClosestFood(self, tunnel, foods, state):
+        bestFood = foods[0]
+        #find the food closest to the tunnel
+        bestDistSoFar = 1000 #i.e., infinity
+        for food in foods:
+            dist = stepsToReach(state, tunnel.coords, food.coords)
+            if (dist < bestDistSoFar):
+                bestFood = food
+                bestDistSoFar = dist
+
+        return bestFood
+
+    ##
+    # setVariables
+    #
+    def setVariables(self, currentState, me):
+        self.elmoId = me
+        if self.myTunnel == None:
+            self.myTunnel = getConstrList(currentState, me, (TUNNEL,))[0]
+
+        if self.myAntHill == None:
+            self.myAntHill = getConstrList(currentState, me, (ANTHILL,))[0]
+
+        if self.enemyTunnel == None:
+            self.enemyTunnel = getConstrList(currentState, 1-me, (TUNNEL,))[0]
+
+        if self.enemyAntHill == None:
+            self.enemyAntHill = getConstrList(currentState, 1-me, (ANTHILL,))[0]
+
+        foods = getConstrList(currentState, None, (FOOD,))
+        if len(foods) > 0 and (self.myFood == None):
+            self.myFood = self.findClosestFood(self.myTunnel, foods, currentState)
+
+        if len(foods) > 0 and (self.enemyFood == None):
+            self.enemyFood = self.findClosestFood(self.enemyTunnel, foods, currentState)
+
+        self.myFoodDist = stepsToReach(currentState, self.myFood.coords, self.myTunnel.coords)
+        self.enemyFoodDist = stepsToReach(currentState, self.enemyFood.coords, self.enemyTunnel.coords)
+
+        # print('My food: ', self.myFood.coords)
+        # print('My tunnel: ', self.myTunnel.coords)
+        # print('My anthill: ', self.myAntHill.coords)
+        #
+        # print('Enemy food: ', self.enemyFood.coords)
+        # print('Enemy tunnel: ', self.enemyTunnel.coords)
+        # print('Enemy anthill: ', self.enemyAntHill.coords)
+
+    # recursive method to find the best move
+    # node : tuple (move, state, evaluation)
+    #   remember that nodes are identified as min or max based on the current player
+    #   of that node's state
+    def findBestMove(self, currentState, currentDepth):
+        currentNodes = []
+
+        childNodes = []
+        # expand current node
+        legalMoves = listAllLegalMoves(currentState)
+        for move in legalMoves:
+            nextState = getNextState(currentState, move)
+            node = (move, nextState, self.stateEvaluation(nextState))
+            currentNodes.append(node)
+
+        # sort nodes based on their initial state evaluation score
+        currentNodes.sort(key=lambda x: x[2], reverse = True)
+
+        # base case
+        if currentDepth == self.depthLimit:
+            return self.getAvgScore(currentNodes)
+
+        # recursive call to evaluate score based on child nodes
+        for node in currentNodes[0:15]:
+            move = node[0]
+            state = node[1]
+            value = self.findBestMove(state, currentDepth+1)
+            node = (move, state, value)
+            childNodes.append(node)
+
+        if currentDepth > 0:
+            return self.getAvgScore(childNodes)
+        else:
+            bestScore = -1000 # i.e. -infinity
+            bestNode = None
+            for node in childNodes:
+                if node[2] > bestScore:
+                    bestScore = node[2]
+                    bestNode = node
+                if node[2] == bestScore:
+                    # TODO: if this is happening a lot, the scores are too similar
+                    # and we should re-evaluate our evaluation function
+                    if random.randint(0, 1) == 1:
+                        bestScore = node[2]
+                        bestNode = node
+
+            if bestNode == None:
+                bestMove = Move(END, None, None)
+            else:
+                bestMove = bestNode[0]
+
+            return bestMove
+
+    # get the average score for every node at a level
+    def getAvgScore(self, nodeList):
+        # avgScore = 0
+        # for node in nodeList:
+        #     # score = self.stateEvaluation(node[1])
+        #     score = node[2]
+        #     avgScore += score
+        # avgScore = avgScore / len(nodeList)
+        # return avgScore
+
+        # TODO decide on a methodology
+
+        bestScore = -1000 # i.e. -infinity
+        for node in nodeList:
+            if node[2] > bestScore:
+                bestScore = node[2]
+
+        return bestScore
+
     ##
     #getAttack
     #Description: Gets the attack to be made from the Player
@@ -214,171 +308,157 @@ class AIPlayer(Player):
     # This agent doens't learn
     #
     def registerWin(self, hasWon):
-        #method templaste, not implemented
+        #method template, not implemented
         pass
 
-# a. the Move that would be taken in the given state from the parent node
-# b. the state that would be reached by taking that move
-# c. an evaluation of this state. When a node is initially created, this will be generated
-# using the method you wrote in the previous step. However, it may be updated to a
-# more accurate measure as the algorithm proceeds (see below).
-# d. (optional) You may also find it helpful to add a reference to the parent node
 
-    def stateEvaluation(self, currentState):  
+    ## stateEvaluation
+    # evaluate the 'goodness' of this state
+    # TODO scale evaluation score to a [-1, 1] value
+    def stateEvaluation(self, currentState):
         # variable initialization
         score = 0
         me = currentState.whoseTurn
         antList = getAntList(currentState, me)
-        enemyInv = getEnemyInv(self, currentState)
-        #enemyAntList = enemyInv.ants 
-        enemyQueen = enemyInv.getQueen
-        enemyWorkerList = getAntList(currentState, 1 - me, (WORKER,))
-
         myInv = getCurrPlayerInventory(currentState)
-        myQueen = myInv.getQueen()
-        myworkerList = getAntList(currentState, me, (WORKER,))
+        myworkerList = getAntList(currentState, me, (WORKER,)) #TODO delete if not used
+        myQueen = myInv.getQueen
+
+        enemyInv = getEnemyInv(self, currentState)
+        enemyQueen = enemyInv.getQueen
+        # determine whether this state should be evaluated as Elmo or opponent
+        # and populate 'enemy' values accordingly
+        if me == self.elmoId:
+            enemyWorkerList = getAntList(currentState, 1 - me, (WORKER,))
+            myFood = self.myFood
+            myAntHill = self.myAntHill
+            myTunnel = self.myTunnel
+
+            enemyFood = self.enemyFood
+            enemyAntHill = self.enemyAntHill
+            enemyTunnel = self.enemyTunnel
+        else:
+            enemyWorkerList = getAntList(currentState, self.elmoId, (WORKER,))
+            myFood = self.enemyFood
+            myAntHill = self.enemyAntHill
+            myTunnel = self.enemyTunnel
+
+            enemyFood = self.myFood
+            enemyAntHill = self.myAntHill
+            enemyTunnel = self.myTunnel
 
         ####Automatic game winning or losing####
-        
-        if myQueen == None or myInv.getAnthill().captureHealth <= 0 or \
-            len(myInv.ants) == 1 and myInv.foodCount == 0 or enemyInv.foodCount >= FOOD_GOAL:
-            return -1.0
+        # TODO add scaling
 
-        if enemyQueen == None or enemyInv.getAnthill().captureHealth <= 0 or \
-            len(enemyInv.ants) == 1 and enemyInv.foodCount == 0 or myInv.foodCount >= FOOD_GOAL:
-            return 1.0
+        winner = getWinner(currentState)
 
-                
-        if myQueen.coords == myInv.getAnthill().coords:
-            score -= 25
+        if winner == 1:
+            return 1
+        elif winner == 0:
+            return -1
+        # if myQueen == None or myInv.getAnthill().captureHealth <= 0 or \
+        #     len(myInv.ants) == 1 and myInv.foodCount == 0 or enemyInv.foodCount >= FOOD_GOAL:
+        #     return -1.0
+        #
+        # if enemyQueen == None or enemyInv.getAnthill().captureHealth <= 0 or \
+        #     len(enemyInv.ants) == 1 and enemyInv.foodCount == 0 or myInv.foodCount >= FOOD_GOAL:
+        #     return 1.0
 
+        # calculate scores for ants
         workerCount = 0
         soldierCount = 0
 
         for ant in antList:
             if ant.type != QUEEN and ant.type != WORKER and ant.type != SOLDIER:
-                return 0
+                return -1 # TODO change to 0
             elif ant.type == WORKER:
+                if workerCount > 0:
+                    continue # don't evaluate workers we do not want to have -- waste of time
                 workerCount += 1
-                if(ant.carrying):
-                    yTunnelDist = abs(self.myTunnel.coords[1] - ant.coords[1])
-                    xTunnelDist = abs(self.myTunnel.coords[0] - ant.coords[0])
-                    tunnelDist = xTunnelDist + yTunnelDist
-                    if tunnelDist < 3:
-                        score += 5
-
-                else:
-                    yFoodDist = abs(self.myFood.coords[1] - ant.coords[1])
-                    xFoodDist = abs(self.myFood.coords[0] - ant.coords[0])
-                    foodDist = xFoodDist + yFoodDist
-                    if foodDist < 3:
-                        score += 5
-
+                score += self.evaluateWorker(ant, myTunnel, myFood)
             elif ant.type == SOLDIER:
-                score += 40
+                return -1 # TODO Remove
                 soldierCount += 1
-                score += ant.coords[1]
+                score += self.evaluateSoldier(ant, enemyWorkerList, enemyAntHill)
+            elif ant.type == QUEEN:
+                # get queen off the anthill, food, or tunnel
+                if ant.coords == myAntHill.coords or ant.coords == myFood.coords or ant.coords == myTunnel.coords:
+                    score -= 25
 
-                if len(enemyWorkerList) > 0:
-                    enemyWorkerCoords = enemyWorkerList[0].coords
-                    dist = approxDist(enemyWorkerList[0],ant.coords)  
-                    score -= (dist) * 2
-                    adjacentCoords = []
-                    adjacentCoords.append((enemyWorkerCoords[0]+1, enemyWorkerCoords[1]))
-                    adjacentCoords.append((enemyWorkerCoords[0]-1, enemyWorkerCoords[1]))
-                    adjacentCoords.append((enemyWorkerCoords[0], enemyWorkerCoords[1]+1))
-                    adjacentCoords.append((enemyWorkerCoords[0], enemyWorkerCoords[1]-1))
-                    if ant.coords in adjacentCoords:
-                        score += 20
-                else:
-                    score += 20
-                    yDistScore = (-abs(enemyInv.getAnthill().coords[1] - ant.coords[1]) + 10)
-                    xDistScore = (-abs(enemyInv.getAnthill().coords[0] - ant.coords[0]) + 10)
-                    score += (yDistScore + xDistScore) * 4
-                    if ant.coords == enemyInv.getAnthill().coords:
-                        score += 20
-
-
-
-
+        # having more than one worker can damage performance: so more than one is an
+         # undesirable state
         if workerCount > 1:
-            return 0
+            print('too many workers')
+            return -1 #TODO change back to 0
 
-        # add 2 to score for each food player has collected
-        score += myInv.foodCount * 7
+        # calculate score for food
+        # score += myInv.foodCount * 7
+        score += myInv.foodCount * 2 * self.myFoodDist
 
-        # add 1 to score for each food your workers are carrying
-        for worker in myworkerList:
-            if worker.carrying:
-                score += 5
-        
+        # print(score*0.01)
+        # scale score down
         return score * 0.01
 
-    # recursive method to find the best move
-    def findBestMove(self, currentState, currentDepth):
 
-        currentNodes = []
+    ## evaluateWorker
+    # function to evaluate a worker ant
+    #
+    def evaluateWorker(self, ant, tunnel, food):
+        workerScore = 0
+        if ant.carrying:
+            # add 5 to score for each food your workers are carrying
+            workerScore += self.myFoodDist
 
-        childNodes = []
-        # expand current node
-        legalMoves = listAllLegalMoves(currentState)
-        for move in legalMoves:
-            nextState = getNextState(currentState, move)
-            node = (move, nextState, self.stateEvaluation(nextState))
-            currentNodes.append(node)
-        
-        # sort nodes based on their initial state evaluation score
-        # currentNodes.sort(key=lambda x: int(x[2]))
+            # calcuate distance to drop off
+            # yTunnelDist = abs(tunnel.coords[1] - ant.coords[1])
+            # xTunnelDist = abs(tunnel.coords[0] - ant.coords[0])
+            # tunnelDist = xTunnelDist + yTunnelDist
+            #
+            # if tunnelDist < 3:
+            #     workerScore += 5
 
-        # base case      
-        if currentDepth == self.depthLimit:
-            return self.getAvgScore(currentNodes)
-
-        # recursive call to evaluate score based on child nodes
-        for node in currentNodes[0:15]:
-            state = node[1]
-            move = node[0]
-            value = self.findBestMove(state, currentDepth+1)
-            node = (move, state, value)
-            childNodes.append(node)
-
-        if currentDepth > 0:
-            return self.getAvgScore(childNodes)
+            workerScore += self.myFoodDist - approxDist(ant.coords, tunnel.coords)
         else:
-            return childNodes          
-    
-    def getAvgScore(self, nodeList):
-        avgScore = 0
-        for node in nodeList:
-            score = self.stateEvaluation(node[1])
-            avgScore += score
-        avgScore = avgScore / len(nodeList)
-        return avgScore
+            # worker not carrying: calculate distance to closest food
+            # yFoodDist = abs(food.coords[1] - ant.coords[1])
+            # xFoodDist = abs(food.coords[0] - ant.coords[0])
+            # foodDist = xFoodDist + yFoodDist
+            # if foodDist < 3:
+            #     workerScore += 5
 
+            workerScore += self.myFoodDist - approxDist(ant.coords, food.coords)
+        return workerScore
 
+    ## evaluateSoldier
+    # function to evaluate a soldier ant
+    #
+    def evaluateSoldier(self, ant, enemyWorkerList, enemyAntHill):
+        soldierScore = 0
+        soldierScore += 40
 
+        soldierScore += ant.coords[1]
 
+        # send soldier to attack workers
+        if len(enemyWorkerList) > 0:
+            enemyWorkerCoords = enemyWorkerList[0].coords
+            yDist = abs(enemyWorkerList[0].coords[1] - ant.coords[1])
+            xDist = abs(enemyWorkerList[0].coords[0] - ant.coords[0])
+            soldierScore -= (yDist + xDist) * 2
+            adjacentCoords = []
+            # want soldier to attack enemy: make it sit right next to enemy worker
+            adjacentCoords.append((enemyWorkerCoords[0]+1, enemyWorkerCoords[1]))
+            adjacentCoords.append((enemyWorkerCoords[0]-1, enemyWorkerCoords[1]))
+            adjacentCoords.append((enemyWorkerCoords[0], enemyWorkerCoords[1]+1))
+            adjacentCoords.append((enemyWorkerCoords[0], enemyWorkerCoords[1]-1))
+            if ant.coords in adjacentCoords:
+                soldierScore += 20
+        else:
+            # no workers, send soldier to enemy anthill (queen will be here for dumb AIs)
+            soldierScore += 20
+            yDistScore = (-abs(enemyAntHill.coords[1] - ant.coords[1]) + 10)
+            xDistScore = (-abs(enemyAntHill.coords[0] - ant.coords[0]) + 10)
+            soldierScore += (yDistScore + xDistScore) * 4
+            if ant.coords == enemyAntHill.coords:
+                soldierScore += 20
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return soldierScore
