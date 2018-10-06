@@ -91,6 +91,8 @@ class AIPlayer(Player):
         self.enemyTunnel = None
         self.enemyFood = None
 
+        self.maxChildSearch = 15
+
     ##
     #getPlacement
     #
@@ -163,30 +165,8 @@ class AIPlayer(Player):
         self.setVariables(currentState, me)
 
         # recursive function to get moves
-        nodes = self.findBestMove(currentState, 0)
+        selectedMove = self.findBestMove(currentState, 0)
 
-        bestScore = -1000 # i.e. -infinity
-        bestNode = None
-        for node in nodes:
-            if node[2] > bestScore:
-                bestScore = node[2]
-                bestNode = node
-            if node[2] == bestScore:
-                # TODO: if this is happening a lot, the scores are too similar
-                # and we should re-evaluate our evaluation function
-                if random.randint(0, 1) == 1:
-                    bestScore = node[2]
-                    bestNode = node
-
-        if bestNode == None:
-            selectedMove = Move(END, None, None)
-        else:
-            selectedMove = bestNode[0]
-            # TODO: remove
-            # print(bestNode[2])
-            # print('Ant carrying: ', getAntList(bestNode[1], me, (WORKER,))[0].carrying)
-            # print('Food: ', getCurrPlayerInventory(bestNode[1]).foodCount)
-            # print('------------------')
         return selectedMove
 
     ##
@@ -255,24 +235,44 @@ class AIPlayer(Player):
             currentNodes.append(node)
 
         # sort nodes based on their initial state evaluation score
-        # currentNodes.sort(key=lambda x: int(x[2]))
+        currentNodes.sort(key=lambda x: x[2], reverse = True)
 
         # base case
         if currentDepth == self.depthLimit:
             return self.getAvgScore(currentNodes)
 
         # recursive call to evaluate score based on child nodes
-        for node in currentNodes[0:15]:
+        # for node in currentNodes[0:self.maxChildSearch]: # TODO potentially restore
+        for node in currentNodes:
             move = node[0]
             state = node[1]
             value = self.findBestMove(state, currentDepth+1)
             node = (move, state, value)
             childNodes.append(node)
 
+        # return either the move for the score for this level of child nodes
         if currentDepth > 0:
             return self.getAvgScore(childNodes)
         else:
-            return childNodes # TODO return best move instead of child nodes
+            bestScore = -1000 # i.e. -infinity
+            bestNode = None
+            for node in childNodes:
+                if node[2] > bestScore:
+                    bestScore = node[2]
+                    bestNode = node
+                if node[2] == bestScore:
+                    # TODO: if this is happening a lot, the scores are too similar
+                    # and we should re-evaluate our evaluation function
+                    if random.randint(0, 1) == 1:
+                        bestScore = node[2]
+                        bestNode = node
+
+            if bestNode == None:
+                bestMove = Move(END, None, None)
+            else:
+                bestMove = bestNode[0]
+
+            return bestMove
 
     # get the average score for every node at a level
     def getAvgScore(self, nodeList):
@@ -284,7 +284,7 @@ class AIPlayer(Player):
         # avgScore = avgScore / len(nodeList)
         # return avgScore
 
-        # TODO decide on a methodology (above or below)
+        # TODO decide on a methodology
 
         bestScore = -1000 # i.e. -infinity
         for node in nodeList:
@@ -353,13 +353,17 @@ class AIPlayer(Player):
 
         ####Automatic game winning or losing####
         # TODO add scaling
+        try:
+            winner = getWinner(currentState)
 
-        winner = getWinner(currentState)
-
-        if winner == 1:
-            return 1
-        elif winner == 0:
-            return -1
+            if winner == 1:
+                return 1000
+                # print('someone won')
+            elif winner == 0:
+                return -1000
+                # print('someone lost')
+        except:
+            pass
         # if myQueen == None or myInv.getAnthill().captureHealth <= 0 or \
         #     len(myInv.ants) == 1 and myInv.foodCount == 0 or enemyInv.foodCount >= FOOD_GOAL:
         #     return -1.0
@@ -373,27 +377,27 @@ class AIPlayer(Player):
         soldierCount = 0
 
         for ant in antList:
-            if ant.type != QUEEN and ant.type != WORKER and ant.type != SOLDIER:
-                return -100 # TODO change to 0
-            elif ant.type == WORKER:
-                if workerCount > 0:
-                    continue # don't evaluate workers we do not want to have -- waste of time
+            if ant.type == WORKER:
                 workerCount += 1
+                if workerCount > 1:
+                    continue # don't evaluate workers we do not want to have -- waste of time
                 score += self.evaluateWorker(ant, myTunnel, myFood)
             elif ant.type == SOLDIER:
-                return -100 # TODO Remove
+                return -1000 # TODO Remove
                 soldierCount += 1
                 score += self.evaluateSoldier(ant, enemyWorkerList, enemyAntHill)
             elif ant.type == QUEEN:
                 # get queen off the anthill, food, or tunnel
                 if ant.coords == myAntHill.coords or ant.coords == myFood.coords or ant.coords == myTunnel.coords:
                     score -= 25
+            else: # undesirable ant type
+                return -1000 #TODO change to 0
 
         # having more than one worker can damage performance: so more than one is an
          # undesirable state
         if workerCount > 1:
             # print('too many workers')
-            return -100 #TODO change back to 0
+            return -1000 #TODO change back to 0
 
         # calculate score for food
         # score += myInv.foodCount * 7
@@ -429,10 +433,9 @@ class AIPlayer(Player):
             # foodDist = xFoodDist + yFoodDist
             # if foodDist < 3:
             #     workerScore += 5
-            # print(' not carrying')
+
             workerScore += self.myFoodDist - approxDist(ant.coords, food.coords)
-            # print('food dist: ', self.myFoodDist)
-            # print('current distance: ', approxDist(ant.coords, food.coords))
+        # print(workerScore)
         return workerScore
 
     ## evaluateSoldier
@@ -468,6 +471,7 @@ class AIPlayer(Player):
                 soldierScore += 20
 
         return soldierScore
+
 
 
 ### UNIT TESTS ###
@@ -569,74 +573,171 @@ if not (testAnt.enemyFoodDist == 2):
 ################################################################################
 # stateEvaluation(self, currentState):
 ################################################################################
+# check win condition
+
+# check moving with food
+myTunnel = Construction((2, 2), TUNNEL)
+enemyTunnel = Construction((2, 4), TUNNEL)
+myAnthill = Construction((0, 0), ANTHILL)
+myAnthill.captureHealth = 3
+enemyAnthill = Construction((3, 4), ANTHILL)
+enemyAnthill.captureHealth = 3
+grassList = [Construction((2, 1), GRASS), Construction((3, 1), GRASS)]
+foodList = [Construction((2,0), FOOD)]
+worker1 = Ant((0,1), WORKER, 0)
+myQueen = Ant((0, 4), QUEEN, 0)
+enemyQueen = Ant((1, 4), QUEEN, 1)
+inventory1 = Inventory(0, [worker1, myQueen], [myAnthill,myTunnel], 5)
+inventory2 = Inventory(1, [enemyQueen], [enemyAnthill, enemyTunnel], 4)
+testAnt.foodDist = 2
+testAnt.myAntHill = myAnthill
+testAnt.myFood = foodList[0]
+testAnt.myTunnel = myTunnel
+
+testAnt.enemyAntHill = enemyAnthill
+testAnt.enemyTunnel = enemyTunnel
+testAnt.enemyFood = foodList[0]
+board =[]
+for i in range (0,5):
+    for j in range (0,5):
+        loc = Location((i,j))
+        if i == 2 and j == 2:
+            loc.constr = myTunnel
+        if i == 2 and j == 4:
+            loc.constr = enemyTunnel
+        if i == 3 and j == 4:
+            loc.constr = enemyAnthill
+        if i == 0 and j == 0:
+            loc.constr = myAnthill
+        if i == 2 and j == 1:
+            loc.constr = grassList[0]
+        if i == 3 and j == 1:
+            loc.constr = grassList[1]
+        if i == 0 and j == 1:
+            loc.constr = worker1
+        if i == 0 and j == 4:
+            loc.constr = myQueen
+        if i == 1 and j == 4:
+            loc.constr = enemyQueen
+        board.append(loc)
+
+generalInventory = Inventory(2, grassList, foodList, 0)
+inventories = [inventory1, inventory2, generalInventory]
+state = GameState(board, inventories, PLAY_PHASE, 0)
+score0 = testAnt.stateEvaluation(state)
+    # now move to closer to food
+coords1 = (1,0)
+state1 = getNextState(state, Move(MOVE_ANT, [worker1.coords, coords1], None))
+score1 = testAnt.stateEvaluation(state1)
+    # or away from food
+coords2 = (1,1)
+state2 = getNextState(state, Move(MOVE_ANT, [worker1.coords, coords2], None))
+score2 = testAnt.stateEvaluation(state2)
+    # now move on to food from state 1
+state3 = getNextState(state1, Move(MOVE_ANT, [coords1, foodList[0].coords], None))
+score3 = testAnt.stateEvaluation(state3)
+    # now move on toward dropoff from state3
+coords4 = (2, 1)
+state4 = getNextState(state3, Move(MOVE_ANT, [foodList[0].coords, coords4], None))
+score4 = testAnt.stateEvaluation(state4)
+    # or move from dropoff
+state5 = getNextState(state3, Move(MOVE_ANT, [foodList[0].coords, coords2], None))
+score5 = testAnt.stateEvaluation(state5)
+    # now move on to dropoff from state4
+state6 = getNextState(state4, Move(MOVE_ANT, [coords4, myTunnel.coords], None))
+score6 = testAnt.stateEvaluation(state6)
+    # now end the turn after state6
+state7 = getNextState(state6, Move(END, None, None))
+score7 = testAnt.stateEvaluation(state7)
+
+if not (score1 > score0 and score2 > score0 and score1 > score2): # not carrying, moving toward food
+    print('- Function stateEvaluation() failed test 1. Score 0: ', score0, ' Score 1: ', score1,
+            ', Score 2: ', score2)
+if not (score3 > score1): # not carrying, moving on to food
+    print('- Function stateEvaluation() failed test 2. Score 3: ', score3, ', Score 1: ', score1)
+if not (score4 > score3 and score5 == score3 and score4 > score5): # carrying, moving away from food
+    print('- Function stateEvaluation() failed test 3. Score 3: ', score3, ' Score 5: ', score5,
+            ', Score 4: ', score4)
+if not (score6 > score4): # carrying, moving on to drop off
+    print('- Function stateEvaluation() failed test 4. Score 4: ', score4, ' Score 6: ', score6)
+#note: this should be same because getNextState ignores end of turn actions
+if not (score6 == score7): # ending turn
+    print('- Function stateEvaluation() failed test 5. Score 6: ', score6, ' Score 7: ', score7)
+
 ################################################################################
 # evaluateWorker(self, ant, tunnel, food):
 ################################################################################
-# food & dropoff adjacent
-worker1 = Ant((0,0), WORKER, 0) # further from food
-worker2 = Ant((0,1), WORKER, 0) # on tunnel next to food
-worker3 = Ant((1,1), WORKER, 0) # has food on food next to tunnel
-worker4 = Ant((1,0), WORKER, 0) # has food on further from tunnel
-worker3.carrying = True
-worker4.carrying = True
-tunnel = Construction((0, 1), TUNNEL)
-food = Construction((1,1), FOOD)
-testAnt.myFoodDist = 1
-
-score1 = testAnt.evaluateWorker(worker1, tunnel, food)
-score2 = testAnt.evaluateWorker(worker2, tunnel, food)
-score3 = testAnt.evaluateWorker(worker3, tunnel, food)
-score4 = testAnt.evaluateWorker(worker4, tunnel, food)
-
-if not (score2 > score1):
-    print('- Function setVariables() failed test 1. Worker further from food score: ', score1,
-        ', Worker on closer to food score: ', score2)
-if not (score3 > score4):
-    print('- Function setVariables() failed test 2. Worker further from tunnel: ', score4,
-        ', Worker on closer to tunnel: ', score3)
-
-# food & dropoff 2 steps apart
-worker1 = Ant((1,1), WORKER, 0) # further from food
-worker2 = Ant((2,1), WORKER, 0) # on tunnel next to food
-worker3 = Ant((2,2), WORKER, 0) # has food on food next to tunnel
-worker4 = Ant((3,2), WORKER, 0) # has food on further from tunnel
-tunnel = Construction((1, 1), TUNNEL)
-food = Construction((3,2), FOOD)
-testAnt.myFoodDist = 1
-
-score1 = testAnt.evaluateWorker(worker1, tunnel, food)
-score2 = testAnt.evaluateWorker(worker2, tunnel, food)
-score3 = testAnt.evaluateWorker(worker3, tunnel, food)
-score4 = testAnt.evaluateWorker(worker4, tunnel, food)
-worker1.carrying = True
-worker2.carrying = True
-worker3.carrying = True
-worker4.carrying = True
-score5 = testAnt.evaluateWorker(worker1, tunnel, food)
-score6 = testAnt.evaluateWorker(worker2, tunnel, food)
-score7 = testAnt.evaluateWorker(worker3, tunnel, food)
-score8 = testAnt.evaluateWorker(worker4, tunnel, food)
-
-print(score1)
-print(score2)
-print(score3)
-print(score4)
-print()
-print(score5)
-print(score6)
-print(score7)
-print(score8)
-
+# # food & dropoff adjacent
+# worker1 = Ant((0,0), WORKER, 0) # further from food
+# worker2 = Ant((0,1), WORKER, 0) # on tunnel next to food
+# worker3 = Ant((1,1), WORKER, 0) # has food on food next to tunnel
+# worker4 = Ant((1,0), WORKER, 0) # has food on further from tunnel
+# worker3.carrying = True
+# worker4.carrying = True
+# tunnel = Construction((0, 1), TUNNEL)
+# food = Construction((1,1), FOOD)
+# testAnt.myFoodDist = 1
+#
+# score1 = testAnt.evaluateWorker(worker1, tunnel, food)
+# score2 = testAnt.evaluateWorker(worker2, tunnel, food)
+# score3 = testAnt.evaluateWorker(worker3, tunnel, food)
+# score4 = testAnt.evaluateWorker(worker4, tunnel, food)
+#
 # if not (score2 > score1):
-#     print('- Function setVariables() failed test 1. Worker further from food score: ', score1,
+#     print('- Function evaluateWorker() failed test 1. Worker further from food score: ', score1,
 #         ', Worker on closer to food score: ', score2)
 # if not (score3 > score4):
-#     print('- Function setVariables() failed test 2. Worker further from tunnel: ', score4,
+#     print('- Function evaluateWorker() failed test 2. Worker further from tunnel: ', score4,
 #         ', Worker on closer to tunnel: ', score3)
-
-# with grass
-
-# worker far from food
-################################################################################
-# evaluateSoldier(self, ant, enemyWorkerList, enemyAntHill):
-################################################################################
+#
+# # food & dropoff 2 steps apart
+# worker1 = Ant((1,1), WORKER, 0) # further from food
+# worker2 = Ant((2,1), WORKER, 0) # on tunnel next to food
+# worker3 = Ant((2,2), WORKER, 0) # has food on food next to tunnel
+# worker4 = Ant((3,2), WORKER, 0) # has food on further from tunnel
+# tunnel = Construction((1, 1), TUNNEL)
+# food = Construction((3,2), FOOD)
+# testAnt.myFoodDist = 3
+#
+# score1 = testAnt.evaluateWorker(worker1, tunnel, food)
+# score2 = testAnt.evaluateWorker(worker2, tunnel, food)
+# score3 = testAnt.evaluateWorker(worker3, tunnel, food)
+# score4 = testAnt.evaluateWorker(worker4, tunnel, food)
+# if not (score4 > score3 and score3 > score2 and score2 > score1):
+#     print('- Function evaluateWorker() failed test 3. Score 1: ', score1, ', Score 2: ', score2,
+#         ', Score 3: ', score3, ', Score4: ', score4)
+#
+# worker1.carrying = True
+# worker2.carrying = True
+# worker3.carrying = True
+# worker4.carrying = True
+# score5 = testAnt.evaluateWorker(worker1, tunnel, food)
+# score6 = testAnt.evaluateWorker(worker2, tunnel, food)
+# score7 = testAnt.evaluateWorker(worker3, tunnel, food)
+# score8 = testAnt.evaluateWorker(worker4, tunnel, food)
+# if not (score8 < score7 and score7 < score6 and score6 < score5):
+#     print('- Function evaluateWorker() failed test 4. Score 5: ', score5, ', Score 6: ', score6,
+#         ', Score 7: ', score7, ', Score8: ', score8)
+#
+# # worker far from food
+# worker1 = Ant((1,1), WORKER, 0)
+# worker2 = Ant((2,3), WORKER, 0)
+# tunnel = Construction((0, 0), TUNNEL)
+# food = Construction((4,3), FOOD)
+# testAnt.myFoodDist = 7
+#
+# score1 = testAnt.evaluateWorker(worker1, tunnel, food)
+# score2 = testAnt.evaluateWorker(worker2, tunnel, food)
+# if not (score2 > score1):
+#     print('- Function evaluateWorker() failed test 5. Score 1: ', score1, ', Score 2: ', score2)
+#
+# worker1.carrying = True
+# worker2.carrying = True
+# score3 = testAnt.evaluateWorker(worker1, tunnel, food)
+# score4 = testAnt.evaluateWorker(worker2, tunnel, food)
+# if  not (score3 > score4):
+#     print('- Function evaluateWorker() failed test 6. Score 3: ', score3, ', Score 4: ', score4)
+#
+# ################################################################################
+# # evaluateSoldier(self, ant, enemyWorkerList, enemyAntHill):
+# ################################################################################
