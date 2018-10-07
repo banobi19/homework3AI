@@ -65,6 +65,17 @@ from AIPlayerUtils import *
 # e. If the depth is greater than zero, return this overall value to the caller. Otherwise,
 # return the Move object from the node that has the highest evaluation score
 
+# ALPHA BETA PRUNING NOTES
+# Nodes start with a range of [-inf, inf]
+#
+# A min node: will start looking at value of children and will pick an upper bound of the value they see. [-inf, min]
+#
+# A max node: will start looking at value of children and will pick a lower bound of the max vaue they see. [max, inf]
+#
+# To prune: Look at the current range of your node. If it is outside the range of your parent node, then stop evaluating children (i.e. do not expand any further)
+#
+# In terms of coding: node[2] can be a int or a tuple. Check type before evaluating.
+
 #Variables:
 #   playerId - The id of the player.
 ##
@@ -167,7 +178,9 @@ class AIPlayer(Player):
         # print('current state score: ', self.stateEvaluation(currentState))
         # asciiPrintState(currentState)
         # recursive function to get moves
-        selectedMove = self.findBestMove(currentState, 0)
+        infinity = float('inf')
+        evalRange = (-infinity, infinity)
+        selectedMove = self.findBestMove(currentState, 0, evalRange)
 
         return selectedMove
 
@@ -228,10 +241,12 @@ class AIPlayer(Player):
     # node : tuple (move, state, evaluation)
     #   remember that nodes are identified as min or max based on the current player
     #   of that node's state
-    def findBestMove(self, currentState, currentDepth):
-        # for storing nodes
+    def findBestMove(self, currentState, currentDepth, grandparentEval):
+        # for storing/evaluating nodes
         currentNodes = []
         childNodes = []
+        infinity = float('inf')
+        parentEval = (-infinity, infinity)
 
         # expand current node by viewing all legal moves
         legalMoves = listAllLegalMoves(currentState)
@@ -240,7 +255,7 @@ class AIPlayer(Player):
             #     continue
             nextState = getNextStateAdversarial(currentState, move)
 
-            #remove undesirable states
+            #remove undesirable states for Elmo
             if nextState.whoseTurn == self.elmoId:
                 if (len(getAntList(nextState, self.elmoId, (WORKER,))) > 1):
                     continue
@@ -250,31 +265,69 @@ class AIPlayer(Player):
                     continue
                 if (len(getAntList(nextState, self.elmoId, (R_SOLDIER,))) > 0):
                     continue
-            node = (move, nextState, self.stateEvaluation(nextState))
+            # start nodes off with an unknown evaluation, or if at depth limit,
+            # get utility with evaluation function (and update the range of the parent)
+            if currentDepth >= self.depthLimit:
+                score = self.stateEvaluation(nextState)
+                # TODO: make into helper function
+                if currentState.whoseTurn == self.elmoId: # update lower bound
+                    if score > parentEval[0]:
+                        parentEval = (score, parentEval[1])
+                else: # update upper bound
+                    if score < parentEval[1]:
+                        parentEval = (parentEval[0], score)
+            else:
+                score = (-infinity, infinity)
+
+            node = (move, nextState, score)
             currentNodes.append(node)
 
         # sort nodes based on their initial state evaluation score
         currentNodes.sort(key=lambda x: x[2], reverse = True)
 
-        # base case: if we are at the depth limit, return average score
+        # base case: if we are at the depth limit, return the final evaluation score of the level
+            # if a min node: final evaluation is the highest min or lowest max score
+            # if a max node: final evaluation is the highest max or lowest min score
+        # TODO: check for error, all of these states should have final eval scores
         if currentDepth >= self.depthLimit:
             node = self.getBestMinimaxNode(currentNodes, currentState.whoseTurn)
-            if node == None:
+            if node == None: #TODO consider returning 0, see what it does
                 if currentState.whoseTurn == self.elmoId:
-                    return -1000
+                    return -1000 # very bad score for max
                 else:
-                    return 1000
-            return node[2]
+                    return 1000 # very bad score for min
+            else:
+                return node[2]
 
-        # We have not yet reached the depth limit
-        # Make recursive call to evaluate score based on child nodes
-        for node in currentNodes[0:self.maxChildSearch]: # TODO potentially restore
-        # for node in currentNodes:
+        # Not at depth limit: make recursive call on current nodes
+        # To prune: look at the eval given to you by recursive call.
+            # 1. Update parentEval with that value.
+            # 2. Compare parentEval to grandparentEval.
+            # 3. If we are out of range, break out of the look and stop expanding children.
+            # Otherwise, keep expanding
+        # for node in currentNodes[0:self.maxChildSearch]: # TODO potentially restore
+        for node in currentNodes:
             move = node[0]
             state = node[1]
-            value = self.findBestMove(state, currentDepth+1)
-            node = (move, state, value)
+            score = self.findBestMove(state, currentDepth+1, parentEval)
+            node = (move, state, score)
             childNodes.append(node)
+            # step 1
+            if currentState.whoseTurn == self.elmoId: # update lower bound
+                if score > parentEval[0]:
+                    parentEval = (score, parentEval[1])
+            else: # update upper bound
+                if score < parentEval[1]:
+                    parentEval = (parentEval[0], score)
+
+            # step 2
+            if parentEval[1] < grandparentEval[0] or parentEval[0] > grandparentEval[1]:
+                # out of range: step 3, prune the rest of the children
+                print('pruned ', len(currentNodes) - len(childNodes), ' nodes')
+                break;
+
+
+        # print('branching factor: ', len(childNodes))
 
         # return either the move for the score for this level of child nodes
         node = self.getBestMinimaxNode(childNodes, currentState.whoseTurn)
@@ -295,7 +348,7 @@ class AIPlayer(Player):
     # get the best score for every node at a level
 
     # for minimax: if you have nodes of your own type, look at those first
-    # if only opposing nodes, pick the lowest of the nodes
+    # if only opposing nodes, pick the 'worst' of those
     def getBestMinimaxNode(self, nodeList, currentTurn):
         min = []
         max = []
@@ -308,17 +361,17 @@ class AIPlayer(Player):
 
         if currentTurn == self.elmoId: # this is a max node
             if len(max) > 0:
-                # get max value
+                # get max value (best for a max player)
                 return self.getMaxNode(max)
             else:
-                # get min value
-                return self.getMinNode(min)
+                # get max value (worst for a min palyer)
+                return self.getMaxNode(min)
         else: # this is a min node
             if len(min) > 0:
-                # get max value
-                return self.getMaxNode(min)
+                # get min value (best for a min player)
+                return self.getMinNode(min)
             else:
-                # get min value
+                # get min value (worst for a max player)
                 return self.getMinNode(max)
 
     ##
@@ -388,6 +441,8 @@ class AIPlayer(Player):
             enemyFood = self.enemyFood
             enemyAntHill = self.enemyAntHill
             enemyTunnel = self.enemyTunnel
+            badScore = -1000
+            goodScore = 1000
         else:
             enemyWorkerList = getAntList(currentState, self.elmoId, (WORKER,))
             myFood = self.enemyFood
@@ -397,6 +452,8 @@ class AIPlayer(Player):
             enemyFood = self.myFood
             enemyAntHill = self.myAntHill
             enemyTunnel = self.myTunnel
+            badScore = 1000
+            goodScore = -1000
 
         ####Automatic game winning or losing####
         # TODO add scaling
@@ -404,20 +461,11 @@ class AIPlayer(Player):
             winner = getWinner(currentState)
 
             if winner == 1 or myInv.foodCount == 11:
-                return 1000
-                # print('someone won')
+                return goodScore
             elif winner == 0:
-                return -1000
-                # print('someone lost')
+                return badScore
         except:
             pass
-        # if myQueen == None or myInv.getAnthill().captureHealth <= 0 or \
-        #     len(myInv.ants) == 1 and myInv.foodCount == 0 or enemyInv.foodCount >= FOOD_GOAL:
-        #     return -1.0
-        #
-        # if enemyQueen == None or enemyInv.getAnthill().captureHealth <= 0 or \
-        #     len(enemyInv.ants) == 1 and enemyInv.foodCount == 0 or myInv.foodCount >= FOOD_GOAL:
-        #     return 1.0
 
         # calculate scores for ants
         workerCount = 0
@@ -439,22 +487,24 @@ class AIPlayer(Player):
                 score += self.evaluateSoldier(ant, enemyWorkerList, enemyAntHill)
             elif ant.type == QUEEN:
                 # get queen off the anthill, food, or tunnel
-                if ant.coords == myAntHill.coords or ant.coords == myFood.coords or ant.coords == myTunnel.coords:
-                    score -= 25
+                if not (ant.coords == myAntHill.coords or ant.coords == myFood.coords or ant.coords == myTunnel.coords):
+                    score += 25
             else: # undesirable ant type
-                return -1000 #TODO change to 0
+                return badScore #TODO change to 0
 
         # having more than one worker can damage performance: so more than one is an
         # undesirable state
         if workerCount > 1 or soldierCount > 1:
-            return -1000 #TODO change back to 0
+            return badScore #TODO change back to 0
 
         # calculate score for food
         score += 2 * myInv.foodCount * 2 * self.myFoodDist
 
-        # print(score*0.01)
         # scale score down
-        return score * 0.01
+        if currentState.whoseTurn == self.elmoId: # max node
+            return score * 0.01
+        else: # min node
+            return -score * 0.01
 
 
     ## evaluateWorker
@@ -527,6 +577,7 @@ class AIPlayer(Player):
 
 ### UNIT TESTS ###
 testAnt = AIPlayer("Elmo")
+testAnt.elmoId = 0
 ################################################################################
 # getMove(self, currentState):
 ################################################################################
