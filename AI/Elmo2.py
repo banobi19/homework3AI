@@ -78,7 +78,7 @@ class AIPlayer(Player):
     #   cpy           - whether the player is a copy (when playing itself)
     ##
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "Elmo")
+        super(AIPlayer,self).__init__(inputPlayerId, "Elmo2")
         self.childNodes = None
         self.depthLimit = 2
         self.elmoId = None
@@ -236,9 +236,9 @@ class AIPlayer(Player):
         # expand current node by viewing all legal moves
         legalMoves = listAllLegalMoves(currentState)
         for move in legalMoves: # evaluate moves & make a node for each --> currentNodes
-            if move.moveType == END:
-                continue
-            nextState = getNextState(currentState, move)
+            # if move.moveType == END:
+            #     continue
+            nextState = getNextStateAdversarial(currentState, move)
 
             #remove undesirable states
             if nextState.whoseTurn == self.elmoId:
@@ -258,7 +258,13 @@ class AIPlayer(Player):
 
         # base case: if we are at the depth limit, return average score
         if currentDepth >= self.depthLimit:
-            return self.getBestScore(currentNodes)
+            node = self.getBestMinimaxNode(currentNodes, currentState.whoseTurn)
+            if node == None:
+                if currentState.whoseTurn == self.elmoId:
+                    return -1000
+                else:
+                    return 1000
+            return node[2]
 
         # We have not yet reached the depth limit
         # Make recursive call to evaluate score based on child nodes
@@ -271,56 +277,68 @@ class AIPlayer(Player):
             childNodes.append(node)
 
         # return either the move for the score for this level of child nodes
+        node = self.getBestMinimaxNode(childNodes, currentState.whoseTurn)
         if currentDepth > 0:
-            return self.getBestScore(childNodes)
+            if node == None:
+                if currentState.whoseTurn == self.elmoId:
+                    return -1000
+                else:
+                    return 1000
+            return node[2]
         else: #TODO consider switching to a heap representation
-            bestScore = -1000 # i.e. -infinity
-            bestNode = None
-            for node in childNodes:
-                if node[2] > bestScore:
-                    bestScore = node[2]
-                    bestNode = node
-                if node[2] == bestScore:
-                    # TODO: if this is happening a lot, the scores are too similar
-                    # and we should re-evaluate our evaluation function
-                    if random.randint(0, 1) == 1:
-                        bestScore = node[2]
-                        bestNode = node
-
-            if bestNode == None:
-                bestMove = Move(END, None, None)
+            if node == None:
+                move = Move(END, None, None)
             else:
-                bestMove = bestNode[0]
-            # try:
-            #     print('Move: ', bestNode[0], 'Eval score: ', bestNode[2])
-            #     asciiPrintState(bestNode[1])
-            # except:
-            #     pass
-            return bestMove
+                move = node[0]
+            return move
 
-    # get the average score for every node at a level
-    def getBestScore(self, nodeList):
-        nodeList.sort(key=lambda x: x[2], reverse = True)
-        if len(nodeList) > 0:
-            return nodeList[0][2]
+    # get the best score for every node at a level
+
+    # for minimax: if you have nodes of your own type, look at those first
+    # if only opposing nodes, pick the lowest of the nodes
+    def getBestMinimaxNode(self, nodeList, currentTurn):
+        min = []
+        max = []
+
+        for node in nodeList:
+            if node[1].whoseTurn == self.elmoId:
+                max.append(node)
+            else:
+                min.append(node)
+
+        if currentTurn == self.elmoId: # this is a max node
+            if len(max) > 0:
+                # get max value
+                return self.getMaxNode(max)
+            else:
+                # get min value
+                return self.getMinNode(min)
+        else: # this is a min node
+            if len(min) > 0:
+                # get max value
+                return self.getMaxNode(min)
+            else:
+                # get min value
+                return self.getMinNode(max)
+
+    ##
+    #getMaxNode
+    #
+    def getMaxNode(self, nodes):
+        nodes.sort(key=lambda x: x[2], reverse = True)
+        if len(nodes) > 0:
+            return nodes[0]
         else:
-            return -1000
-        # avgScore = 0
-        # for node in nodeList:
-        #     # score = self.stateEvaluation(node[1])
-        #     score = node[2]
-        #     avgScore += score
-        # avgScore = avgScore / len(nodeList)
-        # return avgScore
-
-        # TODO decide on a methodology
-        #
-        # bestScore = -1000 # i.e. -infinity
-        # for node in nodeList:
-        #     if node[2] > bestScore:
-        #         bestScore = node[2]
-        #
-        # return bestScore
+            return None
+    ##
+    #getMinNode
+    #
+    def getMinNode(self,nodes):
+        nodes.sort(key=lambda x: x[2])
+        if len(nodes) > 0:
+            return nodes[0]
+        else:
+            return None
 
     ##
     #getAttack
@@ -603,15 +621,17 @@ if not (testAnt.enemyFoodDist == 2):
 ################################################################################
 # getBestScore(self, nodeList):
 ################################################################################
-nodes1 = [(None, None, 0), (None, None, 110), (None, None, -30), (None, None, 12), (None, None, 1),
-        (None, None, 46), (None, None, 15), (None, None, 15.1), (None, None, 15), (None, None, 100)]
+nodes1 = [(None, GameState(None,None,None,0), 0), (None, GameState(None,None,None,0), 110),
+        (None, GameState(None,None,None,0), -30), (None, GameState(None,None,None,0), 12), (None, GameState(None,None,None,0), 1),
+        (None, GameState(None,None,None,0), 46), (None, GameState(None,None,None,0), 15), (None, GameState(None,None,None,0), 15.1),
+        (None, GameState(None,None,None,0), 15), (None,GameState(None,None,None,0), 100)]
 nodes2 = []
-bestScore1 = testAnt.getBestScore(nodes1)
-bestScore2 = testAnt.getBestScore(nodes2)
-if not (bestScore1 == 110):
-    print('- Function getBestScore() failed test 1. Desired score: 110. Found score: ', bestScore1)
-if not (bestScore2 == -1000):
-    print('- Function getBestScore() failed test 2. Desired Score: -1000. Found score: ', bestScore2)
+bestScore1 = testAnt.getBestMinimaxNode(nodes1, 0)
+bestScore2 = testAnt.getBestMinimaxNode(nodes2, 0)
+if not (bestScore1[2] == 110):
+    print('- Function getBestMinimaxNode() failed test 1. Desired score: 110. Found score: ', bestScore1)
+if not (bestScore2 == None):
+    print('- Function getBestMinimaxNode() failed test 2. Desired Score: -1000. Found score: ', bestScore2)
 # currentNodes.sort(key=lambda x: x[2], reverse = True) # TODO: test sorting
 ################################################################################
 # stateEvaluation(self, currentState):
