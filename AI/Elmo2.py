@@ -306,6 +306,8 @@ class AIPlayer(Player):
             move = node[0]
             state = node[1]
             score = self.findBestMove(state, currentDepth+1, parentEval)
+            if type(score) == Move:
+                break
             node = (move, state, score)
             childNodes.append(node)
             # step 1
