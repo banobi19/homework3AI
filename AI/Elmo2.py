@@ -263,15 +263,12 @@ class AIPlayer(Player):
 
             # start nodes off with an unknown evaluation, or if at depth limit,
             # get utility with evaluation function (and update the range of the parent)
-            # if currentDepth >= self.depthLimit:
             score = self.stateEvaluation(nextState)
             if currentState.whoseTurn == self.elmoId and score == 1000: # winning move, return it
                 return move
             elif not (currentState.whoseTurn == self.elmoId) and score == -1000: # winning move, return it
                 return move
             parentEval = self.updateParent(parentEval, score, currentState.whoseTurn)
-            # else:
-            #     score = (-infinity, infinity)
 
             # make a node to represent this state
             node = (move, nextState, score)
@@ -289,7 +286,7 @@ class AIPlayer(Player):
             # if a max node: final evaluation is the highest max or lowest min score
         if currentDepth >= self.depthLimit:
             node = self.getBestMinimaxNode(currentNodes, currentState.whoseTurn)
-            if node == None: #TODO consider returning 0, see what it does
+            if node == None:
                 if currentState.whoseTurn == self.elmoId:
                     return -1000 # very bad score for max
                 else:
@@ -303,7 +300,7 @@ class AIPlayer(Player):
             # 2. Compare parentEval to grandparentEval.
             # 3. If we are out of range, break out of the loop and stop expanding children.
             # Otherwise, keep expanding
-        # for node in currentNodes[0:self.maxChildSearch]: # TODO potentially restore
+        # for node in currentNodes[0:self.maxChildSearch]:
         for node in currentNodes:
 
             move = node[0]
@@ -319,8 +316,6 @@ class AIPlayer(Player):
                 # out of range: step 3, prune the rest of the children
                 # print('pruned ', len(currentNodes) - len(childNodes), ' nodes')
                 break;
-
-        # print('branching factor: ', len(childNodes))
 
         # return either the move or the score for this level of child nodes
         node = self.getBestMinimaxNode(childNodes, currentState.whoseTurn)
@@ -456,10 +451,6 @@ class AIPlayer(Player):
 
         for ant in antList:
             if ant.type == WORKER:
-                # workerCount += 1
-                #
-                # if workerCount > 1:
-                #     continue # don't evaluate workers we do not want to have -- waste of time
                 score += 2 * self.evaluateWorker(ant, myTunnel, myFood)
 
                 # try to incentivize winning the game
@@ -467,12 +458,8 @@ class AIPlayer(Player):
                     score += 2 * self.myFoodDist
 
             elif ant.type == SOLDIER or ant.type == DRONE or ant.type == R_SOLDIER:
-                # soldierCount += 1
-
-                # if soldierCount > 1:
-                #     continue # don't evaluate soldiers we do not want to have -- waste of time
                 score += self.evaluateSoldier(ant, enemyWorkerList, enemyAntHill)
-                if len(self.listAttackableAnts(state, ant.coords, UNIT_STATS[ant.type][RANGE])) > 1: #TODO: test
+                if len(self.listAttackableAnts(currentState, ant.coords, UNIT_STATS[ant.type][RANGE])) > 1: #TODO: test
                     score += 5
 
             elif ant.type == QUEEN:
@@ -481,12 +468,6 @@ class AIPlayer(Player):
                     score += 25
             else: # undesirable ant type
                 return 0
-
-        # having more than one worker can damage performance: so more than one is an
-        # undesirable state
-        # if workerCount > 1 or soldierCount > 1:
-        #     return 0 # TODO test
-
         # calculate score for food
         score += 2 * myInv.foodCount * 2 * self.myFoodDist
 
