@@ -18,10 +18,6 @@ from AIPlayerUtils import *
 
 # Automatic Win or lose case: This will result into an automatic -1 or 1
 # - 1 means our ai lost and 1 is our ai wins
-#Done - Opponent quenen is killed
-#Done - Sit on the anthill for three turns
-#Done - 11 food
-#Done - no workers and no food
 
 # Game state cases:
 #Done 1) Type of worker: 1, solider/drone/range: 2
@@ -67,13 +63,9 @@ from AIPlayerUtils import *
 
 # ALPHA BETA PRUNING NOTES
 # Nodes start with a range of [-inf, inf]
-#
 # A min node: will start looking at value of children and will pick an upper bound of the value they see. [-inf, min]
-#
 # A max node: will start looking at value of children and will pick a lower bound of the max vaue they see. [max, inf]
-#
 # To prune: Look at the current range of your node. If it is outside the range of your parent node, then stop evaluating children (i.e. do not expand any further)
-#
 # In terms of coding: node[2] can be a int or a tuple. Check type before evaluating.
 
 #Variables:
@@ -91,7 +83,7 @@ class AIPlayer(Player):
     def __init__(self, inputPlayerId):
         super(AIPlayer,self).__init__(inputPlayerId, "Elmo2")
         self.childNodes = None
-        self.depthLimit = 2
+        self.depthLimit = 3
         self.elmoId = None
 
         self.myAntHill = None
@@ -158,11 +150,9 @@ class AIPlayer(Player):
         else:
             return [(0, 0)]
 
-
     ##
     #getMove
     #Description: Gets the next move from the Player.
-    #
     #Parameters:
     #   currentState - The state of the current game waiting for the player's move (GameState)
     #
@@ -173,10 +163,8 @@ class AIPlayer(Player):
 
         # the first time this method is called, the food and tunnel locations
         # need to be recorded in their respective instance variables
-        self.setVariables(currentState, me)
-        # print('---------------------------------------------------')
-        # print('current state score: ', self.stateEvaluation(currentState))
-        # asciiPrintState(currentState)
+        if self.elmoId == None:
+            self.setVariables(currentState, me)
         # recursive function to get moves
         infinity = float('inf')
         evalRange = (-infinity, infinity)
@@ -186,8 +174,15 @@ class AIPlayer(Player):
 
     ##
     # findClosest
+    # Description: finds the closest target from a set of targets to a given source
+    # Parameters:
+    #   src: source coord we need things to be close to
+    #   targets: list of possible targets (i.e. enemy ants, food)
+    #   state: state object (only needed if you want to do stepsToReach > approxDist)
     #
     def findClosest(self, src, targets, state = None):
+        if len(targets) < 1:
+            return None
         bestTar = targets[0]
         #find the target closest to the source
         bestDistSoFar = 1000 #i.e., infinity
@@ -199,14 +194,16 @@ class AIPlayer(Player):
             if (dist < bestDistSoFar):
                 bestTar = target
                 bestDistSoFar = dist
-
         return bestTar
 
     ##
     # setVariables
+    # initializes player variables
     #
     def setVariables(self, currentState, me):
+        # AI player ID
         self.elmoId = me
+        # game board locations
         if self.myTunnel == None:
             self.myTunnel = getConstrList(currentState, me, (TUNNEL,))[0]
 
@@ -219,6 +216,7 @@ class AIPlayer(Player):
         if self.enemyAntHill == None:
             self.enemyAntHill = getConstrList(currentState, 1-me, (ANTHILL,))[0]
 
+        # food locations
         foods = getConstrList(currentState, None, (FOOD,))
         if len(foods) > 0 and (self.myFood == None):
             self.myFood = self.findClosest(self.myTunnel, foods, currentState)
@@ -226,21 +224,19 @@ class AIPlayer(Player):
         if len(foods) > 0 and (self.enemyFood == None):
             self.enemyFood = self.findClosest(self.enemyTunnel, foods, currentState)
 
+        # food distances
         self.myFoodDist = stepsToReach(currentState, self.myFood.coords, self.myTunnel.coords)
         self.enemyFoodDist = stepsToReach(currentState, self.enemyFood.coords, self.enemyTunnel.coords)
 
-        # print('My food: ', self.myFood.coords)
-        # print('My tunnel: ', self.myTunnel.coords)
-        # print('My anthill: ', self.myAntHill.coords)
-        #
-        # print('Enemy food: ', self.enemyFood.coords)
-        # print('Enemy tunnel: ', self.enemyTunnel.coords)
-        # print('Enemy anthill: ', self.enemyAntHill.coords)
-
-    # recursive method to find the best move
-    # node : tuple (move, state, evaluation)
-    #   remember that nodes are identified as min or max based on the current player
-    #   of that node's state
+    ## findBestMove
+    # Description: recursive method to find the best move for a min or max player
+    #       node : tuple (move, state, evaluation)
+    #       nodes are identified as min or max based on the current player
+    #       of that node's state
+    # Parameters:
+    #   currentState: state of the game to find best move from
+    #   currentDepth: current depth in the recursion (max of self.depthLimit)
+    #   grandparentEval: the evaluation of the grandparent node for ALPHA BETA pruning
     def findBestMove(self, currentState, currentDepth, grandparentEval):
         # for storing/evaluating nodes
         currentNodes = []
@@ -251,50 +247,45 @@ class AIPlayer(Player):
         # expand current node by viewing all legal moves
         legalMoves = listAllLegalMoves(currentState)
         for move in legalMoves: # evaluate moves & make a node for each --> currentNodes
-            # if move.moveType == END:
-            #     continue
+            # get the resulting state of a move
             nextState = getNextStateAdversarial(currentState, move)
 
-            #remove undesirable states for Elmo
+            # remove Elmo's undesirable states
             if nextState.whoseTurn == self.elmoId:
                 if (len(getAntList(nextState, self.elmoId, (WORKER,))) > 1):
                     continue
-                if (len(getAntList(nextState, self.elmoId, (DRONE,))) > 0):
+                if (len(getAntList(nextState, self.elmoId, (DRONE,))) > 1):
                     continue
                 if (len(getAntList(nextState, self.elmoId, (SOLDIER,))) > 1):
                     continue
                 if (len(getAntList(nextState, self.elmoId, (R_SOLDIER,))) > 0):
                     continue
+
             # start nodes off with an unknown evaluation, or if at depth limit,
             # get utility with evaluation function (and update the range of the parent)
             if currentDepth >= self.depthLimit:
                 score = self.stateEvaluation(nextState)
-                # TODO: make into helper function
-                if currentState.whoseTurn == self.elmoId: # update lower bound
-                    if score > parentEval[0]:
-                        parentEval = (score, parentEval[1])
-                else: # update upper bound
-                    if score < parentEval[1]:
-                        parentEval = (parentEval[0], score)
+                if currentState.whoseTurn == self.elmoId and score == 1000: # winning move, return it
+                    return move
+                elif not (currentState.whoseTurn == self.elmoId) and score == -1000: # winning move, return it
+                    return move
+                parentEval = self.updateParent(parentEval, score, currentState.whoseTurn)
             else:
                 score = (-infinity, infinity)
 
+            # make a node to represent this state
             node = (move, nextState, score)
             currentNodes.append(node)
 
-        # sort nodes based on their initial state evaluation score
-
+        # sort nodes based on the desirability of initial state evaluation score
         if currentState.whoseTurn == self.elmoId:
-            currentNodes.sort(key=lambda x: x[2], reverse = True)
-            # print('max')
+            currentNodes.sort(key=lambda x: x[2], reverse = True) # high scores are good
         else:
-            currentNodes.sort(key=lambda x: x[2])
-            # print('min')
+            currentNodes.sort(key=lambda x: x[2]) # low scores are good
 
         # base case: if we are at the depth limit, return the final evaluation score of the level
             # if a min node: final evaluation is the highest min or lowest max score
             # if a max node: final evaluation is the highest max or lowest min score
-        # TODO: check for error, all of these states should have final eval scores
         if currentDepth >= self.depthLimit:
             node = self.getBestMinimaxNode(currentNodes, currentState.whoseTurn)
             if node == None: #TODO consider returning 0, see what it does
@@ -319,19 +310,13 @@ class AIPlayer(Player):
             node = (move, state, score)
             childNodes.append(node)
             # step 1
-            if currentState.whoseTurn == self.elmoId: # update lower bound
-                if score > parentEval[0]:
-                    parentEval = (score, parentEval[1])
-            else: # update upper bound
-                if score < parentEval[1]:
-                    parentEval = (parentEval[0], score)
+            parentEval = self.updateParent(parentEval, score, currentState.whoseTurn)
 
             # step 2
             if parentEval[1] < grandparentEval[0] or parentEval[0] > grandparentEval[1]:
                 # out of range: step 3, prune the rest of the children
-                print('pruned ', len(currentNodes) - len(childNodes), ' nodes')
+                # print('pruned ', len(currentNodes) - len(childNodes), ' nodes')
                 break;
-
 
         # print('branching factor: ', len(childNodes))
 
@@ -344,56 +329,41 @@ class AIPlayer(Player):
                 else:
                     return 1000 # very bad for min player
             return node[2]
-        else: #TODO consider switching to a heap representation
+        else:
             if node == None:
                 move = Move(END, None, None)
             else:
                 move = node[0]
             return move
 
-    # get the best score for every node at a level
+    ## updateParent
+    #
+    # Description: update the alpha-beta score range of a parent node based on the
+    #   eval score of child node
+    # Parameters:
+    #   parent: score range of parent
+    #   score: score of child
+    #   currPlayer: id of current player of parent node (min or max)
+    def updateParent(self, parent, score, currPlayer):
+        if currPlayer == self.elmoId: # update lower bound
+            if score > parent[0]:
+                parent = (score, parent[1])
+        else: # update upper bound
+            if score < parent[1]:
+                parent = (parent[0], score)
+        return parent
 
-    # for minimax: if you have nodes of your own type, look at those first
-    # if only opposing nodes, pick the 'worst' of those
-    def getBestMinimaxNode(self, nodeList, currentTurn):
-        min = []
-        max = []
-
-        for node in nodeList:
-            if node[1].whoseTurn == self.elmoId:
-                max.append(node)
-            else:
-                min.append(node)
-
+    ## getBestMinimaxNode
+    #
+    # Description: get the optimal node for the current player
+    #   for minimax: min player wants low nodes, max player wants high nodes
+    # Return: most optimal node
+    def getBestMinimaxNode(self, nodes, currentTurn):
         if currentTurn == self.elmoId: # this is a max node
-            if len(max) > 0:
-                # get max value (best for a max player)
-                return self.getMaxNode(max)
-            else:
-                # get max value (worst for a min palyer)
-                return self.getMaxNode(min)
-        else: # this is a min node
-            if len(min) > 0:
-                # get min value (best for a min player)
-                return self.getMinNode(min)
-            else:
-                # get min value (worst for a max player)
-                return self.getMinNode(max)
+            nodes.sort(key=lambda x: x[2], reverse = True)
 
-    ##
-    #getMaxNode
-    #
-    def getMaxNode(self, nodes):
-        nodes.sort(key=lambda x: x[2], reverse = True)
-        if len(nodes) > 0:
-            return nodes[0]
-        else:
-            return None
-    ##
-    #getMinNode
-    #
-    def getMinNode(self,nodes):
-        nodes.sort(key=lambda x: x[2])
+        else: # this is a min node
+            nodes.sort(key=lambda x: x[2])
         if len(nodes) > 0:
             return nodes[0]
         else:
@@ -431,7 +401,6 @@ class AIPlayer(Player):
         me = currentState.whoseTurn
         antList = getAntList(currentState, me)
         myInv = getCurrPlayerInventory(currentState)
-        myworkerList = getAntList(currentState, me, (WORKER,)) #TODO delete if not used
         myQueen = myInv.getQueen
 
         enemyInv = getEnemyInv(self, currentState)
@@ -465,7 +434,6 @@ class AIPlayer(Player):
         # TODO add scaling
         try:
             winner = getWinner(currentState)
-
             if winner == 1 or myInv.foodCount == 11:
                 return goodScore
             elif winner == 0:
@@ -479,29 +447,36 @@ class AIPlayer(Player):
 
         for ant in antList:
             if ant.type == WORKER:
-                workerCount += 1
-                if workerCount > 1:
-                    continue # don't evaluate workers we do not want to have -- waste of time
+                # workerCount += 1
+                #
+                # if workerCount > 1:
+                #     continue # don't evaluate workers we do not want to have -- waste of time
                 score += 2 * self.evaluateWorker(ant, myTunnel, myFood)
+
                 # try to incentivize winning the game
                 if ant.coords == myTunnel.coords and myInv.foodCount == 10:
                     score += 2 * self.myFoodDist
-            elif ant.type == SOLDIER or ant.type == DRONE:
-                soldierCount += 1
-                if workerCount > 1:
-                    continue # don't evaluate soldiers we do not want to have -- waste of time
+
+            elif ant.type == SOLDIER or ant.type == DRONE or ant.type == R_SOLDIER:
+                # soldierCount += 1
+
+                # if soldierCount > 1:
+                #     continue # don't evaluate soldiers we do not want to have -- waste of time
                 score += self.evaluateSoldier(ant, enemyWorkerList, enemyAntHill)
+                score += len(self.listAttackableAnts(state, ant.coords, UNIT_STATS[ant.type][RANGE])) #TODO: test
+
             elif ant.type == QUEEN:
                 # get queen off the anthill, food, or tunnel
                 if not (ant.coords == myAntHill.coords or ant.coords == myFood.coords or ant.coords == myTunnel.coords):
                     score += 25
-            else: # undesirable ant type
+
+            else: # Bad ant type
                 return badScore #TODO change to 0
 
         # having more than one worker can damage performance: so more than one is an
-        # undesirable state
-        if workerCount > 1 or soldierCount > 1:
-            return badScore #TODO change back to 0
+        # undesirable state TODO remove (and from above)
+        # if workerCount > 1 or soldierCount > 1:
+        #     return badScore #TODO change back to 0
 
         # calculate score for food
         score += 2 * myInv.foodCount * 2 * self.myFoodDist
@@ -522,25 +497,10 @@ class AIPlayer(Player):
             # add 5 to score for each food your workers are carrying
             workerScore += self.myFoodDist
 
-            # calcuate distance to drop off
-            # yTunnelDist = abs(tunnel.coords[1] - ant.coords[1])
-            # xTunnelDist = abs(tunnel.coords[0] - ant.coords[0])
-            # tunnelDist = xTunnelDist + yTunnelDist
-            #
-            # if tunnelDist < 3:
-            #     workerScore += 5
-
             workerScore += self.myFoodDist - approxDist(ant.coords, tunnel.coords)
         else:
-            # worker not carrying: calculate distance to closest food
-            # yFoodDist = abs(food.coords[1] - ant.coords[1])
-            # xFoodDist = abs(food.coords[0] - ant.coords[0])
-            # foodDist = xFoodDist + yFoodDist
-            # if foodDist < 3:
-            #     workerScore += 5
-
             workerScore += self.myFoodDist - approxDist(ant.coords, food.coords)
-        # print(workerScore)
+
         return workerScore
 
     ## evaluateSoldier
@@ -549,16 +509,16 @@ class AIPlayer(Player):
     def evaluateSoldier(self, ant, enemyWorkerList, enemyAntHill):
         soldierScore = 0
         soldierScore += 40
+        if ant.type == R_SOLDIER:
+            soldierScore -= 20
 
         soldierScore += ant.coords[1]
 
         # send soldier to attack workers
         if len(enemyWorkerList) > 0:
             enemyWorker = self.findClosest(ant, enemyWorkerList)
-            # enemyWorkerCoords = enemyWorkerList[0].coords
+
             enemyWorkerCoords = enemyWorker.coords
-            # yDist = abs(enemyWorkerList[0].coords[1] - ant.coords[1])
-            # xDist = abs(enemyWorkerList[0].coords[0] - ant.coords[0])
             soldierScore -= (approxDist(ant.coords, enemyWorkerCoords)) * 2
             adjacentCoords = []
             # want soldier to attack enemy: make it sit right next to enemy worker
@@ -571,15 +531,30 @@ class AIPlayer(Player):
         else:
             # no workers, send soldier to enemy anthill (queen will be here for dumb AIs)
             soldierScore += 20
-            # yDistScore = (-abs(enemyAntHill.coords[1] - ant.coords[1]) + 10)
-            # xDistScore = (-abs(enemyAntHill.coords[0] - ant.coords[0]) + 10)
             soldierScore -= (approxDist(ant.coords, enemyAntHill.coords)) * 4
             if ant.coords == enemyAntHill.coords:
                 soldierScore += 20
 
         return soldierScore
 
-
+    ##
+    #listAttackableAnts
+    #
+    # Parameters:
+    #   state: current state of game
+    #   attackerLoc: the ant's location who wants to attack
+    #   range: the range of the attacking ant
+    #
+    # Return: the list of enemy ants you are able to attack with given location and range
+    ##
+    def listAttackableAnts(self, state, attackerLoc, range = 1):
+        attackable = listAttackable(attackerLoc, range)
+        attackableAnts = []
+        for square in attackable:
+            ant = getAntAt(state, square)
+            if(ant != None and not ant.player == state.whoseTurn):
+                attackableAnts.append(ant)
+        return attackableAnts
 
 ### UNIT TESTS ###
 testAnt = AIPlayer("Elmo")
@@ -689,7 +664,7 @@ if not (bestScore1[2] == 110):
     print('- Function getBestMinimaxNode() failed test 1. Desired score: 110. Found score: ', bestScore1)
 if not (bestScore2 == None):
     print('- Function getBestMinimaxNode() failed test 2. Desired Score: -1000. Found score: ', bestScore2)
-# currentNodes.sort(key=lambda x: x[2], reverse = True) # TODO: test sorting
+
 ################################################################################
 # stateEvaluation(self, currentState):
 ################################################################################
@@ -787,77 +762,153 @@ if not (score6 == score7): # ending turn
 ################################################################################
 # evaluateWorker(self, ant, tunnel, food):
 ################################################################################
-# # food & dropoff adjacent
-# worker1 = Ant((0,0), WORKER, 0) # further from food
-# worker2 = Ant((0,1), WORKER, 0) # on tunnel next to food
-# worker3 = Ant((1,1), WORKER, 0) # has food on food next to tunnel
-# worker4 = Ant((1,0), WORKER, 0) # has food on further from tunnel
-# worker3.carrying = True
-# worker4.carrying = True
-# tunnel = Construction((0, 1), TUNNEL)
-# food = Construction((1,1), FOOD)
-# testAnt.myFoodDist = 1
-#
-# score1 = testAnt.evaluateWorker(worker1, tunnel, food)
-# score2 = testAnt.evaluateWorker(worker2, tunnel, food)
-# score3 = testAnt.evaluateWorker(worker3, tunnel, food)
-# score4 = testAnt.evaluateWorker(worker4, tunnel, food)
-#
-# if not (score2 > score1):
-#     print('- Function evaluateWorker() failed test 1. Worker further from food score: ', score1,
-#         ', Worker on closer to food score: ', score2)
-# if not (score3 > score4):
-#     print('- Function evaluateWorker() failed test 2. Worker further from tunnel: ', score4,
-#         ', Worker on closer to tunnel: ', score3)
-#
-# # food & dropoff 2 steps apart
-# worker1 = Ant((1,1), WORKER, 0) # further from food
-# worker2 = Ant((2,1), WORKER, 0) # on tunnel next to food
-# worker3 = Ant((2,2), WORKER, 0) # has food on food next to tunnel
-# worker4 = Ant((3,2), WORKER, 0) # has food on further from tunnel
-# tunnel = Construction((1, 1), TUNNEL)
-# food = Construction((3,2), FOOD)
-# testAnt.myFoodDist = 3
-#
-# score1 = testAnt.evaluateWorker(worker1, tunnel, food)
-# score2 = testAnt.evaluateWorker(worker2, tunnel, food)
-# score3 = testAnt.evaluateWorker(worker3, tunnel, food)
-# score4 = testAnt.evaluateWorker(worker4, tunnel, food)
-# if not (score4 > score3 and score3 > score2 and score2 > score1):
-#     print('- Function evaluateWorker() failed test 3. Score 1: ', score1, ', Score 2: ', score2,
-#         ', Score 3: ', score3, ', Score4: ', score4)
-#
-# worker1.carrying = True
-# worker2.carrying = True
-# worker3.carrying = True
-# worker4.carrying = True
-# score5 = testAnt.evaluateWorker(worker1, tunnel, food)
-# score6 = testAnt.evaluateWorker(worker2, tunnel, food)
-# score7 = testAnt.evaluateWorker(worker3, tunnel, food)
-# score8 = testAnt.evaluateWorker(worker4, tunnel, food)
-# if not (score8 < score7 and score7 < score6 and score6 < score5):
-#     print('- Function evaluateWorker() failed test 4. Score 5: ', score5, ', Score 6: ', score6,
-#         ', Score 7: ', score7, ', Score8: ', score8)
-#
-# # worker far from food
-# worker1 = Ant((1,1), WORKER, 0)
-# worker2 = Ant((2,3), WORKER, 0)
-# tunnel = Construction((0, 0), TUNNEL)
-# food = Construction((4,3), FOOD)
-# testAnt.myFoodDist = 7
-#
-# score1 = testAnt.evaluateWorker(worker1, tunnel, food)
-# score2 = testAnt.evaluateWorker(worker2, tunnel, food)
-# if not (score2 > score1):
-#     print('- Function evaluateWorker() failed test 5. Score 1: ', score1, ', Score 2: ', score2)
-#
-# worker1.carrying = True
-# worker2.carrying = True
-# score3 = testAnt.evaluateWorker(worker1, tunnel, food)
-# score4 = testAnt.evaluateWorker(worker2, tunnel, food)
-# if  not (score3 > score4):
-#     print('- Function evaluateWorker() failed test 6. Score 3: ', score3, ', Score 4: ', score4)
-#
-# ################################################################################
-# # evaluateSoldier(self, ant, enemyWorkerList, enemyAntHill):
-# ################################################################################
+# food & dropoff adjacent
+worker1 = Ant((0,0), WORKER, 0) # further from food
+worker2 = Ant((0,1), WORKER, 0) # on tunnel next to food
+worker3 = Ant((1,1), WORKER, 0) # has food on food next to tunnel
+worker4 = Ant((1,0), WORKER, 0) # has food on further from tunnel
+worker3.carrying = True
+worker4.carrying = True
+tunnel = Construction((0, 1), TUNNEL)
+food = Construction((1,1), FOOD)
+testAnt.myFoodDist = 1
+
+score1 = testAnt.evaluateWorker(worker1, tunnel, food)
+score2 = testAnt.evaluateWorker(worker2, tunnel, food)
+score3 = testAnt.evaluateWorker(worker3, tunnel, food)
+score4 = testAnt.evaluateWorker(worker4, tunnel, food)
+
+if not (score2 > score1):
+    print('- Function evaluateWorker() failed test 1. Worker further from food score: ', score1,
+        ', Worker on closer to food score: ', score2)
+if not (score3 > score4):
+    print('- Function evaluateWorker() failed test 2. Worker further from tunnel: ', score4,
+        ', Worker on closer to tunnel: ', score3)
+
+# food & dropoff 2 steps apart
+worker1 = Ant((1,1), WORKER, 0) # further from food
+worker2 = Ant((2,1), WORKER, 0) # on tunnel next to food
+worker3 = Ant((2,2), WORKER, 0) # has food on food next to tunnel
+worker4 = Ant((3,2), WORKER, 0) # has food on further from tunnel
+tunnel = Construction((1, 1), TUNNEL)
+food = Construction((3,2), FOOD)
+testAnt.myFoodDist = 3
+
+score1 = testAnt.evaluateWorker(worker1, tunnel, food)
+score2 = testAnt.evaluateWorker(worker2, tunnel, food)
+score3 = testAnt.evaluateWorker(worker3, tunnel, food)
+score4 = testAnt.evaluateWorker(worker4, tunnel, food)
+if not (score4 > score3 and score3 > score2 and score2 > score1):
+    print('- Function evaluateWorker() failed test 3. Score 1: ', score1, ', Score 2: ', score2,
+        ', Score 3: ', score3, ', Score4: ', score4)
+
+worker1.carrying = True
+worker2.carrying = True
+worker3.carrying = True
+worker4.carrying = True
+score5 = testAnt.evaluateWorker(worker1, tunnel, food)
+score6 = testAnt.evaluateWorker(worker2, tunnel, food)
+score7 = testAnt.evaluateWorker(worker3, tunnel, food)
+score8 = testAnt.evaluateWorker(worker4, tunnel, food)
+if not (score8 < score7 and score7 < score6 and score6 < score5):
+    print('- Function evaluateWorker() failed test 4. Score 5: ', score5, ', Score 6: ', score6,
+        ', Score 7: ', score7, ', Score8: ', score8)
+
+# worker far from food
+worker1 = Ant((1,1), WORKER, 0)
+worker2 = Ant((2,3), WORKER, 0)
+tunnel = Construction((0, 0), TUNNEL)
+food = Construction((4,3), FOOD)
+testAnt.myFoodDist = 7
+
+score1 = testAnt.evaluateWorker(worker1, tunnel, food)
+score2 = testAnt.evaluateWorker(worker2, tunnel, food)
+if not (score2 > score1):
+    print('- Function evaluateWorker() failed test 5. Score 1: ', score1, ', Score 2: ', score2)
+
+worker1.carrying = True
+worker2.carrying = True
+score3 = testAnt.evaluateWorker(worker1, tunnel, food)
+score4 = testAnt.evaluateWorker(worker2, tunnel, food)
+if  not (score3 > score4):
+    print('- Function evaluateWorker() failed test 6. Score 3: ', score3, ', Score 4: ', score4)
+
+################################################################################
+# evaluateSoldier(self, ant, enemyWorkerList, enemyAntHill):
+################################################################################
+################################################################################
+    ## UNIT TEST FOR listAttackableAnts(state, attackerLoc, range = 1)
+################################################################################
+# test no attackableAnts
+board = []
+for i in range (0,5):
+    for j in range (0,5):
+        loc = Location((i,j))
+        board.append(loc)
+inventory0 = Inventory(0, [], None, None)
+inventory1 = Inventory(1, [Ant((2,2), SOLDIER, 0)], None, None)
+inventories = [inventory0, inventory1]
+testState1 = GameState(board, inventories, PLAY_PHASE, 1)
+
+attackable = testAnt.listAttackableAnts(testState1, (2,2))
+if not len(attackable) == 0:
+    print('- Function listAttackableAnts() failed. Input: state = ', testState1, ', '
+            'location = (2,2); Output: ', attackable)
+
+# test 1 ant
+board = []
+for i in range (0,5):
+    for j in range (0,5):
+        loc = Location((i,j))
+        if i == 2 and j == 3:
+            loc.ant = Ant((i,j), WORKER, 0)
+        board.append(loc)
+inventory0 = Inventory(0, [Ant((2,3), WORKER, 0)], None, None)
+inventory1 = Inventory(1, [Ant((2,2), SOLDIER, 0)], None, None)
+inventories = [inventory0, inventory1]
+testState2 = GameState(board, inventories, PLAY_PHASE, 1)
+
+attackable = testAnt.listAttackableAnts(testState2, (2,2))
+if not len(attackable) == 1 or not attackable[0].type == WORKER:
+    print('- Function listAttackableAnts() failed. Input: state = ', testState2, ', '
+            'location = (2,2); Output: ', attackable)
+
+# test 2 ants
+board = []
+for i in range (0,5):
+    for j in range (0,5):
+        loc = Location((i,j))
+        if i == 2 and j == 3:
+            loc.ant = Ant((i,j), WORKER, 0)
+        if i == 2 and j == 1:
+            loc.ant = Ant((i,j), WORKER, 0)
+        board.append(loc)
+inventory0 = Inventory(0, [Ant((2,3), WORKER, 0), Ant((2,1), WORKER, 0)], None, None)
+inventory1 = Inventory(1, [Ant((2,2), SOLDIER, 0)], None, None)
+inventories = [inventory0, inventory1]
+testState3 = GameState(board, inventories, PLAY_PHASE, 1)
+
+attackable = testAnt.listAttackableAnts(testState3, (2,2))
+if not len(attackable) == 2:
+    print('- Function listAttackableAnts() failed. Input: state = ', testState3, ', '
+            'location = (2,2); Output: ', attackable)
+
+# test range 2
+board = []
+for i in range (0,5):
+    for j in range (0,5):
+        loc = Location((i,j))
+        if i == 2 and j == 3:
+            loc.ant = Ant((i,j), WORKER, 0)
+        if i == 2 and j == 0:
+            loc.ant = Ant((i,j), WORKER, 0)
+        board.append(loc)
+inventory0 = Inventory(0, [Ant((2,3), WORKER, 0), Ant((2,0), WORKER, 0)], None, None)
+inventory1 = Inventory(1, [Ant((2,2), SOLDIER, 0)], None, None)
+inventories = [inventory0, inventory1]
+testState4 = GameState(board, inventories, PLAY_PHASE, 1)
+
+attackable = testAnt.listAttackableAnts(testState4, (2,2), 2)
+if not len(attackable) == 2:
+    print('- Function listAttackableAnts() failed. Input: state = ', testState4, ', '
+            'location = (2,2); Output: ', attackable)
