@@ -263,21 +263,22 @@ class AIPlayer(Player):
 
             # start nodes off with an unknown evaluation, or if at depth limit,
             # get utility with evaluation function (and update the range of the parent)
-            if currentDepth >= self.depthLimit:
-                score = self.stateEvaluation(nextState)
-                if currentState.whoseTurn == self.elmoId and score == 1000: # winning move, return it
-                    return move
-                elif not (currentState.whoseTurn == self.elmoId) and score == -1000: # winning move, return it
-                    return move
-                parentEval = self.updateParent(parentEval, score, currentState.whoseTurn)
-            else:
-                score = (-infinity, infinity)
+            # if currentDepth >= self.depthLimit:
+            score = self.stateEvaluation(nextState)
+            if currentState.whoseTurn == self.elmoId and score == 1000: # winning move, return it
+                return move
+            elif not (currentState.whoseTurn == self.elmoId) and score == -1000: # winning move, return it
+                return move
+            parentEval = self.updateParent(parentEval, score, currentState.whoseTurn)
+            # else:
+            #     score = (-infinity, infinity)
 
             # make a node to represent this state
             node = (move, nextState, score)
             currentNodes.append(node)
 
         # sort nodes based on the desirability of initial state evaluation score
+
         if currentState.whoseTurn == self.elmoId:
             currentNodes.sort(key=lambda x: x[2], reverse = True) # high scores are good
         else:
@@ -316,7 +317,7 @@ class AIPlayer(Player):
             # step 2
             if parentEval[1] < grandparentEval[0] or parentEval[0] > grandparentEval[1]:
                 # out of range: step 3, prune the rest of the children
-                print('pruned ', len(currentNodes) - len(childNodes), ' nodes')
+                # print('pruned ', len(currentNodes) - len(childNodes), ' nodes')
                 break;
 
         # print('branching factor: ', len(childNodes))
@@ -341,7 +342,6 @@ class AIPlayer(Player):
                     if self.stateEvaluation(node[1]) == 1000:
                         move = node[0]
                         return move
-
 
             return move
 
@@ -394,7 +394,7 @@ class AIPlayer(Player):
     ##
     #registerWin
     #
-    # This agent doens't learn
+    # This agent doesn't learn
     #
     def registerWin(self, hasWon):
         #method template, not implemented
@@ -490,8 +490,12 @@ class AIPlayer(Player):
         # calculate score for food
         score += 2 * myInv.foodCount * 2 * self.myFoodDist
 
+        # calculate score for queens
         score += myQueen.health * 2
         score -= enemyQueen.health * 2
+
+        # calculate score for Constructions
+        score += self.getConstrEvalScore(myAntHill)
 
         # scale score down
         if currentState.whoseTurn == self.elmoId: # max node
@@ -499,7 +503,15 @@ class AIPlayer(Player):
         else: # min node
             return -score * 0.01
 
-
+    # Helper method to calculate the portion of the evaluation score determined
+    # by construction health levels
+    def getConstrEvalScore(self, anthill):
+        score = 0
+        try:
+            score += (anthill.captureHealth * 3)
+        except:
+            pass
+        return score
 
     ## evaluateWorker
     # function to evaluate a worker ant
