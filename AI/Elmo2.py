@@ -300,10 +300,11 @@ class AIPlayer(Player):
         # To prune: look at the eval given to you by recursive call.
             # 1. Update parentEval with that value.
             # 2. Compare parentEval to grandparentEval.
-            # 3. If we are out of range, break out of the look and stop expanding children.
+            # 3. If we are out of range, break out of the loop and stop expanding children.
             # Otherwise, keep expanding
-        for node in currentNodes[0:self.maxChildSearch]: # TODO potentially restore
-        # for node in currentNodes:
+        # for node in currentNodes[0:self.maxChildSearch]: # TODO potentially restore
+        for node in currentNodes:
+
             move = node[0]
             state = node[1]
             score = self.findBestMove(state, currentDepth+1, parentEval)
@@ -320,7 +321,7 @@ class AIPlayer(Player):
 
         # print('branching factor: ', len(childNodes))
 
-        # return either the move for the score for this level of child nodes
+        # return either the move or the score for this level of child nodes
         node = self.getBestMinimaxNode(childNodes, currentState.whoseTurn)
         if currentDepth > 0:
             if node == None:
@@ -334,6 +335,14 @@ class AIPlayer(Player):
                 move = Move(END, None, None)
             else:
                 move = node[0]
+
+            if node[2] == 1000:
+                for node in currentNodes:
+                    if self.stateEvaluation(node[1]) == 1000:
+                        move = node[0]
+                        return move
+
+
             return move
 
     ## updateParent
@@ -404,7 +413,7 @@ class AIPlayer(Player):
         myQueen = myInv.getQueen
 
         enemyInv = getEnemyInv(self, currentState)
-        enemyQueen = enemyInv.getQueen
+        enemyQueen = enemyInv.getQueen()
         # determine whether this state should be evaluated as Elmo or opponent
         # and populate 'enemy' values accordingly
         if me == self.elmoId:
@@ -469,23 +478,26 @@ class AIPlayer(Player):
                 # get queen off the anthill, food, or tunnel
                 if not (ant.coords == myAntHill.coords or ant.coords == myFood.coords or ant.coords == myTunnel.coords):
                     score += 25
-
-            else: # Bad ant type
-                return badScore #TODO change to 0
+            else: # undesirable ant type
+                return 0
 
         # having more than one worker can damage performance: so more than one is an
-        # undesirable state TODO remove (and from above)
+        # undesirable state
         # if workerCount > 1 or soldierCount > 1:
-        #     return badScore #TODO change back to 0
+        #     return 0 # TODO test
 
         # calculate score for food
         score += 2 * myInv.foodCount * 2 * self.myFoodDist
+
+        score += myQueen.health * 2
+        score -= enemyQueen.health * 2
 
         # scale score down
         if currentState.whoseTurn == self.elmoId: # max node
             return score * 0.01
         else: # min node
             return -score * 0.01
+
 
 
     ## evaluateWorker
