@@ -316,7 +316,7 @@ class AIPlayer(Player):
             # step 2
             if parentEval[1] < grandparentEval[0] or parentEval[0] > grandparentEval[1]:
                 # out of range: step 3, prune the rest of the children
-                # print('pruned ', len(currentNodes) - len(childNodes), ' nodes')
+                print('pruned ', len(currentNodes) - len(childNodes), ' nodes')
                 break;
 
         # print('branching factor: ', len(childNodes))
@@ -410,7 +410,7 @@ class AIPlayer(Player):
         me = currentState.whoseTurn
         antList = getAntList(currentState, me)
         myInv = getCurrPlayerInventory(currentState)
-        myQueen = myInv.getQueen
+        myQueen = myInv.getQueen()
 
         enemyInv = getEnemyInv(self, currentState)
         enemyQueen = enemyInv.getQueen()
@@ -472,7 +472,8 @@ class AIPlayer(Player):
                 # if soldierCount > 1:
                 #     continue # don't evaluate soldiers we do not want to have -- waste of time
                 score += self.evaluateSoldier(ant, enemyWorkerList, enemyAntHill)
-                score += len(self.listAttackableAnts(state, ant.coords, UNIT_STATS[ant.type][RANGE])) #TODO: test
+                if len(self.listAttackableAnts(state, ant.coords, UNIT_STATS[ant.type][RANGE])) > 1: #TODO: test
+                    score += 5
 
             elif ant.type == QUEEN:
                 # get queen off the anthill, food, or tunnel

@@ -68,7 +68,7 @@ def getAntList(currentState,
             result.append(ant)
 
     return result
-        
+
 
 ##
 # getConstrList()
@@ -101,7 +101,7 @@ def getConstrList(currentState,
             result.append(constr)
 
     return result
-        
+
 
 ##
 # getConstrAt
@@ -180,7 +180,7 @@ def getWinner(currentState):
         return 0
 
     return None
-    
+
 
 ##
 # listAdjacent
@@ -244,11 +244,11 @@ def listAttackable(coord, dist = 1):
 # calculates all the adjacent cells that can be reached from a given coord.
 #
 # Parameters:
-#    state        - a GameState object 
+#    state        - a GameState object
 #    coords       - where the ant is
 #    movement     - movement points the ant has
 #
-# Return:  a list of coords (tuples)   
+# Return:  a list of coords (tuples)
 def listReachableAdjacent(state, coords, movement, ignoresGrass = False):
     #build a list of all adjacent cells
     oneStep = listAdjacent(coords)
@@ -497,7 +497,7 @@ def isPathOkForQueen(path):
         or (coord[1] == BOARD_LENGTH / 2):
             return False
     return True
-    
+
 ##
 # listAllMovementMoves
 #
@@ -566,9 +566,9 @@ def getCurrPlayerInventory(currentState):
         if inv.player == currentState.whoseTurn:
             resultInv = inv
             break
-        
+
     return resultInv
-    
+
 ##
 # Return: a reference to the QUEEN of the player whose turn it is
 def getCurrPlayerQueen(currentState):
@@ -594,7 +594,7 @@ def getCurrPlayerFood(self, currentState):
         myFood.append(food[1])
     return myFood
 
- 
+
 
 ##
 # Return: a reference to my enemy's inventory
@@ -603,7 +603,7 @@ def getEnemyInv(self, currentState):
         return currentState.inventories[1]
     else:
         return currentState.inventories[0]
-        
+
 ##
 # getNextState
 #
@@ -719,13 +719,14 @@ def getNextStateAdversarial(currentState, move):
         for ant in myAnts:
             if ant.coords == startingCoord:
                 ant.hasMoved = True
+    
     elif move.moveType == END:
         for ant in myAnts:
             ant.hasMoved = False
         nextState.whoseTurn = 1 - currentState.whoseTurn
     return nextState
 
-    
+
 ##
 # returns a character representation of a given ant
 # (helper for asciiPrintState)
