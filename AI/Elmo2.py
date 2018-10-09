@@ -510,12 +510,12 @@ class AIPlayer(Player):
                 if not (ant.coords == myAntHill.coords or ant.coords == myFood.coords or ant.coords == myTunnel.coords):
                     score += 25
             else: # undesirable ant type
-                return 0 #TODO change to 0
+                return 0
 
         # having more than one worker can damage performance: so more than one is an
         # undesirable state
         if workerCount > 1 or soldierCount > 1:
-            return 0 #TODO change back to 0
+            return 0
 
         # calculate score for food
         score += 2 * myInv.foodCount * 2 * self.myFoodDist
