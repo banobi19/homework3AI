@@ -102,7 +102,7 @@ class AIPlayer(Player):
         self.enemyTunnel = None
         self.enemyFood = None
 
-        self.maxChildSearch = 15
+        self.maxChildSearch = 25
 
     ##
     #getPlacement
@@ -283,7 +283,13 @@ class AIPlayer(Player):
             currentNodes.append(node)
 
         # sort nodes based on their initial state evaluation score
-        currentNodes.sort(key=lambda x: x[2], reverse = True)
+
+        if currentState.whoseTurn == self.elmoId:
+            currentNodes.sort(key=lambda x: x[2], reverse = True)
+            # print('max')
+        else:
+            currentNodes.sort(key=lambda x: x[2])
+            # print('min')
 
         # base case: if we are at the depth limit, return the final evaluation score of the level
             # if a min node: final evaluation is the highest min or lowest max score
@@ -305,9 +311,14 @@ class AIPlayer(Player):
             # 2. Compare parentEval to grandparentEval.
             # 3. If we are out of range, break out of the loop and stop expanding children.
             # Otherwise, keep expanding
+<<<<<<< HEAD
         # for node in currentNodes[0:self.maxChildSearch]: # TODO potentially restore
         for node in currentNodes:
 
+=======
+        for node in currentNodes[0:self.maxChildSearch]: # TODO potentially restore
+        # for node in currentNodes:
+>>>>>>> c8ed634f47bbcd6b9193e7beba0f235730c72fe8
             move = node[0]
             state = node[1]
             score = self.findBestMove(state, currentDepth+1, parentEval)
@@ -335,9 +346,9 @@ class AIPlayer(Player):
         if currentDepth > 0:
             if node == None:
                 if currentState.whoseTurn == self.elmoId:
-                    return -1000
+                    return -1000 # very bad for max player
                 else:
-                    return 1000
+                    return 1000 # very bad for min player
             return node[2]
         else: #TODO consider switching to a heap representation
             if node == None:
@@ -489,7 +500,7 @@ class AIPlayer(Player):
                 # try to incentivize winning the game
                 if ant.coords == myTunnel.coords and myInv.foodCount == 10:
                     score += 2 * self.myFoodDist
-            elif ant.type == SOLDIER:
+            elif ant.type == SOLDIER or ant.type == DRONE:
                 soldierCount += 1
                 if workerCount > 1:
                     continue # don't evaluate soldiers we do not want to have -- waste of time
